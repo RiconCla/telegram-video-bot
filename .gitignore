@@ -1,0 +1,39 @@
+# Зависимости
+node_modules/
+
+# Конфиденциальные данные
+credit.env
+.env
+.env.local
+.env.*.local
+
+# Логи
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Временные файлы
+temp/
+*.tmp
+*.temp
+
+# Кэш
+.npm/
+.yarn/cache/
+.eslintcache
+
+# IDE и редакторы
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Операционная система
+.DS_Store
+Thumbs.db
+
+# PM2
+.pm2/
