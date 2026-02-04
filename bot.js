@@ -17,10 +17,10 @@ const userFiles = new Map();
 
 // Защита от спама
 const userLastRequest = new Map();
-const RATE_LIMIT = 5000; // 5 секунд между запросами
+const RATE_LIMIT = 2000; // 5 секунд между запросами
 
 // Константы для управления файлами
-const MAX_FILES_PER_USER = 3;
+const MAX_FILES_PER_USER = 15;
 const FILE_LIFETIME = 10 * 60 * 1000; // 10 минут
 
 // ============================================
@@ -343,21 +343,26 @@ async function downloadTiktok(url, userId) {
         if (response.data && response.data.code === 0) {
             const data = response.data.data;
 
+            // СНАЧАЛА проверяем наличие изображений (слайдшоу)
+            // Это важно, потому что для слайдшоу API возвращает И изображения, И видео с черным фоном
+            if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+                log('success', `TikTok slideshow: ${data.images.length} images`, userId);
+                return {
+                    success: true,
+                    type: 'image',
+                    url: data.images,  // массив URL изображений
+                    thumbnail: data.cover
+                };
+            }
+
+            // ПОТОМ проверяем видео (только если нет изображений)
             if (data.play) {
-                log('success', 'TikTok download successful: video', userId);
+                log('success', 'TikTok video download successful', userId);
                 log('info', `Video URL: ${data.play.substring(0, 100)}...`, userId);
                 return {
                     success: true,
                     type: 'video',
-                    url: data.hdplay || data.play,
-                    thumbnail: data.cover
-                };
-            } else if (data.images && data.images.length > 0) {
-                log('success', `TikTok download successful: ${data.images.length} images`, userId);
-                return {
-                    success: true,
-                    type: 'image',
-                    url: data.images,
+                    url: data.hdplay || data.play,  // приоритет HD качеству
                     thumbnail: data.cover
                 };
             }
@@ -372,29 +377,113 @@ async function downloadTiktok(url, userId) {
     }
 }
 
+
 // ============================================
-// СКАЧИВАНИЕ С INSTAGRAM
+// СКАЧИВАНИЕ С INSTAGRAM (МНОЖЕСТВЕННЫЕ МЕТОДЫ)
 // ============================================
 
 async function downloadInstagram(url, userId) {
-    try {
-        log('info', `Starting Instagram download: ${url}`, userId);
+    log('info', `Starting Instagram download: ${url}`, userId);
 
-        // Метод через embed
+    // Метод 1: RapidAPI Instagram Downloader
+    try {
+        log('info', 'Trying Method 1: RapidAPI', userId);
+
+        const response = await axios.get('https://instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com/convert', {
+            params: {
+                url: url
+            },
+            headers: {
+                'x-rapidapi-host': 'instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com',
+                'x-rapidapi-key': 'b7b7194ea4mshb3a8f7d61567aa8p1663f0jsn781d3c4e2970'
+            },
+            timeout: 15000
+        });
+
+        if (response.data) {
+            const data = response.data;
+
+            // Правильный формат: data.media - это массив
+            if (data.media && Array.isArray(data.media) && data.media.length > 0) {
+                const mediaItem = data.media[0];
+
+                if (mediaItem.url) {
+                    const mediaType = mediaItem.type || 'video';
+                    log('success', `Method 1 successful: ${mediaType}`, userId);
+                    return {
+                        success: true,
+                        type: mediaType,
+                        url: mediaItem.url
+                    };
+                }
+            }
+
+            // Запасные варианты
+            if (data.download_url) {
+                log('success', 'Method 1 successful', userId);
+                return { success: true, type: 'video', url: data.download_url };
+            }
+
+            log('warning', `Method 1 unexpected response format`, userId);
+        }
+    } catch (error) {
+        log('warning', `Method 1 failed: ${error.message}`, userId);
+    }
+
+    // Метод 2: Прямой запрос к Instagram (упрощённый)
+    try {
+        log('info', 'Trying Method 2: Instagram direct', userId);
+
+        const shortcode = url.match(/\/(p|reel|tv)\/([^/?]+)/)?.[2];
+        if (shortcode) {
+            const response = await axios.get(`https://www.instagram.com/reel/${shortcode}/`, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+                },
+                timeout: 15000
+            });
+
+            const html = response.data;
+
+            // Ищем video_url в HTML
+            const videoMatch = html.match(/"video_url":"([^"]+)"/);
+            if (videoMatch) {
+                const videoUrl = videoMatch[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
+                log('success', 'Method 2 successful: video', userId);
+                return { success: true, type: 'video', url: videoUrl };
+            }
+
+            // Ищем display_url для изображений
+            const imageMatch = html.match(/"display_url":"([^"]+)"/);
+            if (imageMatch) {
+                const imageUrl = imageMatch[1].replace(/\\/g, '');
+                log('success', 'Method 2 successful: image', userId);
+                return { success: true, type: 'image', url: imageUrl };
+            }
+        }
+    } catch (error) {
+        log('warning', `Method 2 failed: ${error.message}`, userId);
+    }
+
+    // Метод 3: Старый embed метод
+    try {
+        log('info', 'Trying Method 3: Legacy embed', userId);
+
         const embedUrl = url.includes('?') ? url.split('?')[0] : url;
         const finalUrl = embedUrl.endsWith('/') ? embedUrl + 'embed/captioned' : embedUrl + '/embed/captioned';
 
         const htmlResponse = await axios.get(finalUrl, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
+            },
+            timeout: 15000
         });
 
         const html = htmlResponse.data;
         let mediaUrl = '';
         let type = 'video';
 
-        // Ищем видео
         if (html.includes('video_url')) {
             const match = html.match(/"video_url":"([^"]+)"/);
             if (match) {
@@ -403,8 +492,7 @@ async function downloadInstagram(url, userId) {
             }
         }
 
-        // Если видео не найдено, ищем изображение
-        if (!mediaUrl) {
+        if (!mediaUrl && html.includes('display_url')) {
             const match = html.match(/"display_url":"([^"]+)"/);
             if (match) {
                 mediaUrl = match[1].replace(/\\/g, '');
@@ -413,22 +501,21 @@ async function downloadInstagram(url, userId) {
         }
 
         if (mediaUrl) {
-            log('success', `Instagram download successful: ${type}`, userId);
+            log('success', `Method 3 successful: ${type}`, userId);
             return {
                 success: true,
                 type: type,
                 url: mediaUrl
             };
         }
-
-        log('warning', 'Instagram download failed: Media not found', userId);
-        return { success: false };
-
     } catch (error) {
-        log('error', `Instagram download error: ${error.message}`, userId);
-        return { success: false };
+        log('warning', `Method 3 failed: ${error.message}`, userId);
     }
+
+    log('error', 'All Instagram download methods failed', userId);
+    return { success: false };
 }
+
 
 // ============================================
 // КОМАНДЫ БОТА
@@ -557,7 +644,7 @@ bot.on('text', async (ctx) => {
         return;
     }
 
-    // Показываем сообщение о загрузке
+// Показываем сообщение о загрузке
     const loadingMsg = await ctx.reply('⏳ Загрузка, пожалуйста подождите...');
     log('info', 'Download started', userId);
 
@@ -575,97 +662,164 @@ bot.on('text', async (ctx) => {
                 log('info', 'Sending video to user', userId);
 
                 try {
-                    // Скачиваем и отправляем видео
                     const videoPath = await downloadMediaFile(result.url, userId, 'video.mp4');
 
-                    // Удаляем сообщение о загрузке ПЕРЕД отправкой
+                    // Редактируем сообщение вместо удаления
                     try {
-                        await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
+                        await ctx.telegram.editMessageText(
+                            ctx.chat.id,
+                            loadingMsg.message_id,
+                            null,
+                            '📤 Отправляю видео...'
+                        );
                     } catch (e) {
-                        log('warning', 'Could not delete loading message', userId);
+                        log('warning', 'Could not edit loading message', userId);
                     }
 
                     await ctx.replyWithVideo(
                         Input.fromLocalFile(videoPath),
-                        { caption: '✅ Видео скачано без водяного знака!' }
+                        {caption: '✅ Видео скачано'}
                     );
                     log('success', 'Video sent successfully', userId);
                 } catch (sendError) {
                     log('error', `Failed to send video: ${sendError.message}`, userId);
-                    // Удаляем сообщение о загрузке в случае ошибки
-                    try {
-                        await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
-                    } catch (e) {}
                     throw sendError;
                 }
 
             } else if (result.type === 'image' || Array.isArray(result.url)) {
-                // Для TikTok слайдов
                 if (Array.isArray(result.url)) {
-                    log('info', `Sending ${result.url.length} images to user`, userId);
+                    // Для TikTok слайдшоу (несколько изображений)
+                    const totalImages = result.url.length;
+                    log('info', `Sending ${totalImages} images to user as media groups`, userId);
 
-                    let successCount = 0;
-                    for (let i = 0; i < Math.min(result.url.length, 10); i++) {
+                    try {
+                        // Редактируем сообщение о загрузке
                         try {
-                            const imageUrl = result.url[i];
-                            const imagePath = await downloadMediaFile(imageUrl, userId, `image_${i}.jpg`);
+                            await ctx.telegram.editMessageText(
+                                ctx.chat.id,
+                                loadingMsg.message_id,
+                                null,
+                                `📤 Отправляю ${totalImages} изображений...`
+                            );
+                        } catch (e) {
+                        }
 
-                            // Удаляем сообщение о загрузке перед отправкой первого изображения
-                            if (i === 0) {
+                        const BATCH_SIZE = 10; // Telegram лимит для медиа-группы
+                        const batches = Math.ceil(totalImages / BATCH_SIZE);
+                        let totalSent = 0;
+
+                        // Обрабатываем по 10 изображений за раз
+                        for (let batch = 0; batch < batches; batch++) {
+                            const startIndex = batch * BATCH_SIZE;
+                            const endIndex = Math.min(startIndex + BATCH_SIZE, totalImages);
+                            const batchUrls = result.url.slice(startIndex, endIndex);
+
+                            log('info', `Processing batch ${batch + 1}/${batches} (images ${startIndex + 1}-${endIndex})`, userId);
+
+                            // Скачиваем изображения текущей порции
+                            const imagePaths = [];
+                            for (let i = 0; i < batchUrls.length; i++) {
                                 try {
-                                    await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
-                                } catch (e) {
-                                    log('warning', 'Could not delete loading message', userId);
+                                    const imageUrl = batchUrls[i];
+                                    const imagePath = await downloadMediaFile(imageUrl, userId, `batch${batch}_image_${i}.jpg`);
+                                    imagePaths.push(imagePath);
+                                } catch (downloadError) {
+                                    log('error', `Failed to download image ${startIndex + i}: ${downloadError.message}`, userId);
                                 }
                             }
 
-                            await ctx.replyWithPhoto(Input.fromLocalFile(imagePath));
-                            successCount++;
-                        } catch (sendError) {
-                            log('error', `Failed to send image ${i}: ${sendError.message}`, userId);
+                            // Отправляем медиа-группу
+                            if (imagePaths.length > 0) {
+                                const mediaGroup = imagePaths.map((path, index) => ({
+                                    type: 'photo',
+                                    media: Input.fromLocalFile(path),
+                                    // Подпись только к первой картинке
+                                    caption: (batch === 0 && index === 0)
+                                        ? `✅ Скачано ${totalImages} изображений${batches > 1 ? ` (часть ${batch + 1}/${batches})` : ''}`
+                                        : (batch > 0 && index === 0)
+                                            ? `📸 Часть ${batch + 1}/${batches}`
+                                            : undefined
+                                }));
+
+                                await ctx.replyWithMediaGroup(mediaGroup);
+                                totalSent += imagePaths.length;
+                                log('success', `Sent batch ${batch + 1}: ${imagePaths.length} images`, userId);
+
+                                // Удаляем файлы после отправки
+                                for (const path of imagePaths) {
+                                    try {
+                                        const fs = require('fs');
+                                        if (fs.existsSync(path)) {
+                                            fs.unlinkSync(path);
+                                            log('info', `Deleted temp file: ${path.split('/').pop()}`, userId);
+                                        }
+                                    } catch (deleteError) {
+                                        log('warning', `Could not delete file: ${path}`, userId);
+                                    }
+                                }
+                            }
+
+                            // Пауза между отправками
+                            if (batch < batches - 1) {
+                                await new Promise(resolve => setTimeout(resolve, 500));
+                            }
                         }
+
+                        if (totalSent > 0) {
+                            log('success', `Successfully sent all ${totalSent} images in ${batches} batch(es)`, userId);
+                        } else {
+                            throw new Error('Failed to send any images');
+                        }
+
+                    } catch (sendError) {
+                        log('error', `Failed to send media groups: ${sendError.message}`, userId);
+                        throw sendError;
                     }
 
-                    if (successCount > 0) {
-                        await ctx.reply('✅ Изображения скачаны без водяного знака!');
-                    } else {
-                        throw new Error('Failed to send any images');
-                    }
                 } else {
-                    log('info', 'Sending image to user', userId);
+                    // Для одиночного изображения (Instagram)
+                    log('info', 'Sending single image to user', userId);
 
                     try {
                         const imagePath = await downloadMediaFile(result.url, userId, 'image.jpg');
 
-                        // Удаляем сообщение о загрузке ПЕРЕД отправкой
                         try {
-                            await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
+                            await ctx.telegram.editMessageText(
+                                ctx.chat.id,
+                                loadingMsg.message_id,
+                                null,
+                                '📤 Отправляю изображение...'
+                            );
                         } catch (e) {
-                            log('warning', 'Could not delete loading message', userId);
                         }
 
                         await ctx.replyWithPhoto(
                             Input.fromLocalFile(imagePath),
-                            { caption: '✅ Изображение скачано без водяного знака!' }
+                            {caption: '✅ Изображение скачано'}
                         );
                     } catch (sendError) {
                         log('error', `Failed to send image: ${sendError.message}`, userId);
-                        // Удаляем сообщение о загрузке в случае ошибки
-                        try {
-                            await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
-                        } catch (e) {}
                         throw sendError;
                     }
                 }
             }
 
-            log('success', 'Media sent successfully', userId);
 
-            // Просто информируем, что можно отправить еще
+            log('success', 'Media sent successfully', userId);
             await ctx.reply('💡 Отправь новую ссылку для скачивания!');
 
         } else {
-            await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
+            // Редактируем сообщение при ошибке
+            try {
+                await ctx.telegram.editMessageText(
+                    ctx.chat.id,
+                    loadingMsg.message_id,
+                    null,
+                    '❌ Ошибка загрузки'
+                );
+            } catch (e) {
+            }
+
             log('error', 'Failed to download media', userId);
             await ctx.reply(
                 '❌ Не удалось скачать медиа. Возможные причины:\n' +
@@ -678,12 +832,21 @@ bot.on('text', async (ctx) => {
         }
     } catch (error) {
         log('error', `Processing error: ${error.message}`, userId);
+
+        // Редактируем сообщение при критической ошибке
         try {
-            await ctx.telegram.deleteMessage(ctx.chat.id, loadingMsg.message_id);
-        } catch (e) {}
+            await ctx.telegram.editMessageText(
+                ctx.chat.id,
+                loadingMsg.message_id,
+                null,
+                '❌ Произошла ошибка'
+            );
+        } catch (e) {
+        }
+
         await ctx.reply('❌ Произошла ошибка при обработке запроса. Попробуйте еще раз.');
     }
-});
+})
 
 // ============================================
 // ОБРАБОТКА ОШИБОК
