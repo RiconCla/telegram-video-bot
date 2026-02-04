@@ -17,7 +17,7 @@ const userFiles = new Map();
 
 // Защита от спама
 const userLastRequest = new Map();
-const RATE_LIMIT = 2000; // 5 секунд между запросами
+const RATE_LIMIT = 1000; // 5 секунд между запросами
 
 // Константы для управления файлами
 const MAX_FILES_PER_USER = 15;
