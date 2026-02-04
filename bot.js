@@ -64,7 +64,7 @@ function log(level, message, userId = null) {
 
     // Записываем в файл
     const logFile = path.join(logsDir, `bot-${new Date().toISOString().split('T')[0]}.log`);
-    fs.appendFileSync(logFile, logMessage + '\\n');
+    fs.appendFileSync(logFile, logMessage + '\n');
 }
 
 // ============================================
@@ -234,7 +234,7 @@ function validateUrl(url) {
 // СКАЧИВАНИЕ МЕДИА ФАЙЛОВ
 // ============================================
 
-async function downloadMediaFile(url, userId, filename) {
+async function downloadMediaFile(url, userId, filename, useProxy = false) {
     try {
         // Проверяем, что URL валидный
         if (!url || typeof url !== 'string') {
@@ -251,12 +251,12 @@ async function downloadMediaFile(url, userId, filename) {
         // Уникальное имя файла для каждого пользователя
         const filePath = path.join(tempDir, `${userId}_${Date.now()}_${filename}`);
 
-        // Скачиваем файл с увеличенным таймаутом и дополнительными заголовками
-        const response = await axios({
+        // Подготавливаем конфигурацию axios
+        const axiosConfig = {
             method: 'GET',
             url: url,
             responseType: 'stream',
-            timeout: 120000, // 120 секунд таймаут
+            timeout: 120000,
             maxRedirects: 5,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -265,7 +265,23 @@ async function downloadMediaFile(url, userId, filename) {
                 'Connection': 'keep-alive',
                 'Referer': 'https://www.tiktok.com/'
             }
-        });
+        };
+
+        // Используем прокси ТОЛЬКО для Instagram (если указано useProxy = true)
+        if (useProxy && SHADOWSOCKS_HOST && SHADOWSOCKS_PORT) {
+            const { SocksProxyAgent } = require('socks-proxy-agent');
+            const proxyUrl = `socks5://${SHADOWSOCKS_HOST}:${SHADOWSOCKS_PORT}`;
+            const agent = new SocksProxyAgent(proxyUrl);
+
+            axiosConfig.httpAgent = agent;
+            axiosConfig.httpsAgent = agent;
+
+            log('info', `Downloading file through Shadowsocks proxy: ${SHADOWSOCKS_HOST}:${SHADOWSOCKS_PORT}`, userId);
+        } else {
+            log('info', 'Downloading file directly (no proxy)', userId);
+        }
+
+        const response = await axios(axiosConfig);
 
         // Проверяем статус ответа
         if (response.status !== 200) {
@@ -665,7 +681,7 @@ bot.on('text', async (ctx) => {
         return;
     }
 
-// Показываем сообщение о загрузке
+    // Показываем сообщение о загрузке
     const loadingMsg = await ctx.reply('⏳ Загрузка, пожалуйста подождите...');
     log('info', 'Download started', userId);
 
@@ -683,7 +699,9 @@ bot.on('text', async (ctx) => {
                 log('info', 'Sending video to user', userId);
 
                 try {
-                    const videoPath = await downloadMediaFile(result.url, userId, 'video.mp4');
+                    // ДЛЯ INSTAGRAM используем прокси (true)
+                    const useProxy = validation.isInstagram;
+                    const videoPath = await downloadMediaFile(result.url, userId, 'video.mp4', useProxy);
 
                     // Редактируем сообщение вместо удаления
                     try {
@@ -709,7 +727,7 @@ bot.on('text', async (ctx) => {
 
             } else if (result.type === 'image' || Array.isArray(result.url)) {
                 if (Array.isArray(result.url)) {
-                    // Для TikTok слайдшоу (несколько изображений)
+                    // Для TikTok слайдшоу (несколько изображений) - БЕЗ ПРОКСИ
                     const totalImages = result.url.length;
                     log('info', `Sending ${totalImages} images to user as media groups`, userId);
 
@@ -737,12 +755,12 @@ bot.on('text', async (ctx) => {
 
                             log('info', `Processing batch ${batch + 1}/${batches} (images ${startIndex + 1}-${endIndex})`, userId);
 
-                            // Скачиваем изображения текущей порции
+                            // Скачиваем изображения текущей порции (БЕЗ ПРОКСИ для TikTok)
                             const imagePaths = [];
                             for (let i = 0; i < batchUrls.length; i++) {
                                 try {
                                     const imageUrl = batchUrls[i];
-                                    const imagePath = await downloadMediaFile(imageUrl, userId, `batch${batch}_image_${i}.jpg`);
+                                    const imagePath = await downloadMediaFile(imageUrl, userId, `batch${batch}_image_${i}.jpg`, false);
                                     imagePaths.push(imagePath);
                                 } catch (downloadError) {
                                     log('error', `Failed to download image ${startIndex + i}: ${downloadError.message}`, userId);
@@ -798,11 +816,12 @@ bot.on('text', async (ctx) => {
                     }
 
                 } else {
-                    // Для одиночного изображения (Instagram)
+                    // Для одиночного изображения (Instagram) - С ПРОКСИ
                     log('info', 'Sending single image to user', userId);
 
                     try {
-                        const imagePath = await downloadMediaFile(result.url, userId, 'image.jpg');
+                        const useProxy = validation.isInstagram;
+                        const imagePath = await downloadMediaFile(result.url, userId, 'image.jpg', useProxy);
 
                         try {
                             await ctx.telegram.editMessageText(
@@ -892,7 +911,7 @@ bot.catch((err, ctx) => {
 bot.launch()
     .then(() => {
         log('success', `Bot started successfully! Subscription check: ${CHECK_SUBSCRIPTION ? 'ENABLED' : 'DISABLED'}`);
-        console.log('\\n' + '='.repeat(50));
+        console.log('\n' + '='.repeat(50));
         console.log('🤖 BOT CONFIGURATION:');
         console.log('='.repeat(50));
         console.log(`📝 Config file: credit.env`);
@@ -905,7 +924,7 @@ bot.launch()
         console.log(`🗂  Max files per user: ${MAX_FILES_PER_USER}`);
         console.log(`⏰ File lifetime: ${FILE_LIFETIME / 60000} minutes`);
         console.log('='.repeat(50));
-        console.log('\\n💡 Press Ctrl+C to stop the bot\\n');
+        console.log('\n💡 Press Ctrl+C to stop the bot\n');
     })
     .catch((error) => {
         log('error', `Bot launch failed: ${error.message}`);
