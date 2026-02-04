@@ -1,10 +1,17 @@
 {
   "name": "telegram-video-bot",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Telegram bot for downloading TikTok and Instagram videos without watermarks",
+  "main": "bot.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node bot.js"
   },
-  "private": true
+  "keywords": ["telegram", "bot", "tiktok", "instagram", "downloader"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7"
+  }
 }
