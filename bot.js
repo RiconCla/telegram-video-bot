@@ -9,6 +9,12 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 const REQUIRED_CHANNEL = process.env.REQUIRED_CHANNEL;
 const CHECK_SUBSCRIPTION = process.env.CHECK_SUBSCRIPTION === 'true';
 
+
+const SHADOWSOCKS_HOST = process.env.SHADOWSOCKS_HOST;
+const SHADOWSOCKS_PORT = process.env.SHADOWSOCKS_PORT;
+const SHADOWSOCKS_PASSWORD = process.env.SHADOWSOCKS_PASSWORD;
+const SHADOWSOCKS_METHOD = process.env.SHADOWSOCKS_METHOD;
+
 // Хранилище состояний пользователей для параллельной работы
 const userStates = new Map();
 
@@ -385,31 +391,48 @@ async function downloadTiktok(url, userId) {
 async function downloadInstagram(url, userId) {
     log('info', `Starting Instagram download: ${url}`, userId);
 
-    // Метод 1: RapidAPI Instagram Downloader
+// Метод 1: RapidAPI Instagram Downloader с Shadowsocks
     try {
-        log('info', 'Trying Method 1: RapidAPI', userId);
+        log('info', 'Trying Method 1: RapidAPI with Shadowsocks', userId);
 
-        const response = await axios.get('https://instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com/convert', {
-            params: {
-                url: url
-            },
+        const { SocksProxyAgent } = require('socks-proxy-agent');
+
+        let axiosConfig = {
+            params: { url: url },
             headers: {
                 'x-rapidapi-host': 'instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com',
                 'x-rapidapi-key': 'b7b7194ea4mshb3a8f7d61567aa8p1663f0jsn781d3c4e2970'
             },
-            timeout: 15000
-        });
+            timeout: 20000 // Увеличили таймаут для прокси
+        };
+
+        // Если Shadowsocks настроен, используем его
+        if (SHADOWSOCKS_HOST && SHADOWSOCKS_PORT) {
+            // Формат для SOCKS5: socks5://host:port
+            // Shadowsocks работает как SOCKS5 прокси
+            const proxyUrl = `socks5://${SHADOWSOCKS_HOST}:${SHADOWSOCKS_PORT}`;
+            const agent = new SocksProxyAgent(proxyUrl);
+
+            axiosConfig.httpAgent = agent;
+            axiosConfig.httpsAgent = agent;
+
+            log('info', `Using Shadowsocks proxy: ${SHADOWSOCKS_HOST}:${SHADOWSOCKS_PORT}`, userId);
+        }
+
+        const response = await axios.get(
+            'https://instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com/convert',
+            axiosConfig
+        );
 
         if (response.data) {
             const data = response.data;
 
-            // Правильный формат: data.media - это массив
             if (data.media && Array.isArray(data.media) && data.media.length > 0) {
                 const mediaItem = data.media[0];
 
                 if (mediaItem.url) {
                     const mediaType = mediaItem.type || 'video';
-                    log('success', `Method 1 successful: ${mediaType}`, userId);
+                    log('success', `Method 1 (Shadowsocks) successful: ${mediaType}`, userId);
                     return {
                         success: true,
                         type: mediaType,
@@ -418,17 +441,15 @@ async function downloadInstagram(url, userId) {
                 }
             }
 
-            // Запасные варианты
-            if (data.download_url) {
-                log('success', 'Method 1 successful', userId);
-                return { success: true, type: 'video', url: data.download_url };
-            }
-
             log('warning', `Method 1 unexpected response format`, userId);
         }
     } catch (error) {
-        log('warning', `Method 1 failed: ${error.message}`, userId);
+        log('warning', `Method 1 (Shadowsocks) failed: ${error.message}`, userId);
+        if (error.response) {
+            log('warning', `Method 1 status: ${error.response.status}`, userId);
+        }
     }
+
 
     // Метод 2: Прямой запрос к Instagram (упрощённый)
     try {
