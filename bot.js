@@ -788,7 +788,7 @@ bot.on('text', async (ctx) => {
 
             } else if (result.type === 'image' || Array.isArray(result.url)) {
                 if (Array.isArray(result.url)) {
-                    // Для TikTok слайдшоу (несколько изображений) - БЕЗ ПРОКСИ
+                    // Для слайдшоу (несколько изображений)
                     const totalImages = result.url.length;
                     log('info', `Sending ${totalImages} images to user as media groups`, userId);
 
@@ -808,6 +808,10 @@ bot.on('text', async (ctx) => {
                         const batches = Math.ceil(totalImages / BATCH_SIZE);
                         let totalSent = 0;
 
+                        // Определяем, нужен ли прокси (для Instagram - ДА, для TikTok - НЕТ)
+                        const useProxyForImages = validation.isInstagram;
+                        log('info', `Using proxy for images: ${useProxyForImages}`, userId);
+
                         // Обрабатываем по 10 изображений за раз
                         for (let batch = 0; batch < batches; batch++) {
                             const startIndex = batch * BATCH_SIZE;
@@ -816,12 +820,18 @@ bot.on('text', async (ctx) => {
 
                             log('info', `Processing batch ${batch + 1}/${batches} (images ${startIndex + 1}-${endIndex})`, userId);
 
-                            // Скачиваем изображения текущей порции (БЕЗ ПРОКСИ для TikTok)
+                            // Скачиваем изображения текущей порции
                             const imagePaths = [];
                             for (let i = 0; i < batchUrls.length; i++) {
                                 try {
                                     const imageUrl = batchUrls[i];
-                                    const imagePath = await downloadMediaFile(imageUrl, userId, `batch${batch}_image_${i}.jpg`, false);
+                                    // ✅ ИСПОЛЬЗУЕМ ПРОКСИ ДЛЯ INSTAGRAM, БЕЗ ПРОКСИ ДЛЯ TIKTOK
+                                    const imagePath = await downloadMediaFile(
+                                        imageUrl,
+                                        userId,
+                                        `batch${batch}_image_${i}.jpg`,
+                                        useProxyForImages  // <-- ИСПРАВЛЕНО!
+                                    );
                                     imagePaths.push(imagePath);
                                 } catch (downloadError) {
                                     log('error', `Failed to download image ${startIndex + i}: ${downloadError.message}`, userId);
@@ -877,7 +887,7 @@ bot.on('text', async (ctx) => {
                     }
 
                 } else {
-                    // Для одиночного изображения (Instagram) - С ПРОКСИ
+                    // Для одиночного изображения
                     log('info', 'Sending single image to user', userId);
 
                     try {
@@ -905,11 +915,138 @@ bot.on('text', async (ctx) => {
                 }
             }
 
+        } else if (result.type === 'image' || Array.isArray(result.url)) {
+            if (Array.isArray(result.url)) {
+                // Для слайдшоу (несколько изображений)
+                const totalImages = result.url.length;
+                log('info', `Sending ${totalImages} images to user as media groups`, userId);
 
-            log('success', 'Media sent successfully', userId);
-            await ctx.reply('💡 Отправь новую ссылку для скачивания!');
+                try {
+                    // Редактируем сообщение о загрузке
+                    try {
+                        await ctx.telegram.editMessageText(
+                            ctx.chat.id,
+                            loadingMsg.message_id,
+                            null,
+                            `📤 Отправляю ${totalImages} изображений...`
+                        );
+                    } catch (e) {
+                    }
 
-        } else {
+                    const BATCH_SIZE = 10; // Telegram лимит для медиа-группы
+                    const batches = Math.ceil(totalImages / BATCH_SIZE);
+                    let totalSent = 0;
+
+                    // Определяем, нужен ли прокси (для Instagram - ДА, для TikTok - НЕТ)
+                    const useProxyForImages = validation.isInstagram;
+                    log('info', `Using proxy for images: ${useProxyForImages}`, userId);
+
+                    // Обрабатываем по 10 изображений за раз
+                    for (let batch = 0; batch < batches; batch++) {
+                        const startIndex = batch * BATCH_SIZE;
+                        const endIndex = Math.min(startIndex + BATCH_SIZE, totalImages);
+                        const batchUrls = result.url.slice(startIndex, endIndex);
+
+                        log('info', `Processing batch ${batch + 1}/${batches} (images ${startIndex + 1}-${endIndex})`, userId);
+
+                        // Скачиваем изображения текущей порции
+                        const imagePaths = [];
+                        for (let i = 0; i < batchUrls.length; i++) {
+                            try {
+                                const imageUrl = batchUrls[i];
+                                // ✅ ИСПОЛЬЗУЕМ ПРОКСИ ДЛЯ INSTAGRAM, БЕЗ ПРОКСИ ДЛЯ TIKTOK
+                                const imagePath = await downloadMediaFile(
+                                    imageUrl,
+                                    userId,
+                                    `batch${batch}_image_${i}.jpg`,
+                                    useProxyForImages
+                                );
+                                imagePaths.push(imagePath);
+                            } catch (downloadError) {
+                                log('error', `Failed to download image ${startIndex + i}: ${downloadError.message}`, userId);
+                            }
+                        }
+
+                        // Отправляем медиа-группу
+                        if (imagePaths.length > 0) {
+                            const mediaGroup = imagePaths.map((path, index) => ({
+                                type: 'photo',
+                                media: Input.fromLocalFile(path),
+                                // Подпись только к первой картинке
+                                caption: (batch === 0 && index === 0)
+                                    ? `✅ Скачано ${totalImages} изображений${batches > 1 ? ` (часть ${batch + 1}/${batches})` : ''}`
+                                    : (batch > 0 && index === 0)
+                                        ? `📸 Часть ${batch + 1}/${batches}`
+                                        : undefined
+                            }));
+
+                            await ctx.replyWithMediaGroup(mediaGroup);
+                            totalSent += imagePaths.length;
+                            log('success', `Sent batch ${batch + 1}: ${imagePaths.length} images`, userId);
+
+                            // Удаляем файлы после отправки
+                            for (const path of imagePaths) {
+                                try {
+                                    const fs = require('fs');
+                                    if (fs.existsSync(path)) {
+                                        fs.unlinkSync(path);
+                                        log('info', `Deleted temp file: ${path.split('/').pop()}`, userId);
+                                    }
+                                } catch (deleteError) {
+                                    log('warning', `Could not delete file: ${path}`, userId);
+                                }
+                            }
+                        }
+
+                        // Пауза между отправками
+                        if (batch < batches - 1) {
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                        }
+                    }
+
+                    if (totalSent > 0) {
+                        log('success', `Successfully sent all ${totalSent} images in ${batches} batch(es)`, userId);
+                    } else {
+                        throw new Error('Failed to send any images');
+                    }
+
+                } catch (sendError) {
+                    log('error', `Failed to send media groups: ${sendError.message}`, userId);
+                    throw sendError;
+                }
+
+            } else {
+                // Для одиночного изображения
+                log('info', 'Sending single image to user', userId);
+
+                try {
+                    const useProxy = validation.isInstagram;
+                    const imagePath = await downloadMediaFile(result.url, userId, 'image.jpg', useProxy);
+
+                    try {
+                        await ctx.telegram.editMessageText(
+                            ctx.chat.id,
+                            loadingMsg.message_id,
+                            null,
+                            '📤 Отправляю изображение...'
+                        );
+                    } catch (e) {
+                    }
+
+                    await ctx.replyWithPhoto(
+                        Input.fromLocalFile(imagePath),
+                        {caption: '✅ Изображение скачано'}
+                    );
+                } catch (sendError) {
+                    log('error', `Failed to send image: ${sendError.message}`, userId);
+                    throw sendError;
+                }
+            }
+
+        log('success', 'Media sent successfully', userId);
+        await ctx.reply('💡 Отправь новую ссылку для скачивания!');
+        }
+        else {
             // Редактируем сообщение при ошибке
             try {
                 await ctx.telegram.editMessageText(
