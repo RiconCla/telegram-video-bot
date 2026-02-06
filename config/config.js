@@ -30,5 +30,11 @@ module.exports = {
     // APIs
     RAPIDAPI_KEY: 'b7b7194ea4mshb3a8f7d61567aa8p1663f0jsn781d3c4e2970',
     RAPIDAPI_HOST: 'instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com',
-    TIKTOK_API_URL: 'https://tikwm.com/api/'
+    TIKTOK_API_URL: 'https://tikwm.com/api/',
+
+    // Статистика и отчёты
+    ADMIN_ID: process.env.ADMIN_ID || null,
+    REPORT_FREQUENCY: process.env.REPORT_FREQUENCY || 'daily',
+    REPORT_TIME: process.env.REPORT_TIME || '20:00',
+    REPORT_TIMEZONE: process.env.REPORT_TIMEZONE || 'Europe/Moscow'
 };

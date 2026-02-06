@@ -6,6 +6,8 @@ const { rateLimitMiddleware } = require('./src/middleware/rateLimit');
 const { handleStart, handleLaunchButton, handleCheckSubscription, getUserState } = require('./src/handlers/start');
 const { handleUrl } = require('./src/handlers/url');
 const { handleBotError } = require('./src/handlers/error');
+const { initScheduler, sendManualReport } = require('./src/services/scheduler');
+const { trackUser } = require('./src/utils/analytics');
 
 // Создаем бота
 const bot = new Telegraf(config.BOT_TOKEN);
@@ -25,6 +27,23 @@ bot.start(handleStart);
 bot.hears('🚀 Запуск бота', handleLaunchButton);
 
 bot.action('check_subscription', handleCheckSubscription);
+
+// ============================================
+// КОМАНДЫ СТАТИСТИКИ (только для админа)
+// ============================================
+
+bot.command('stats', async (ctx) => {
+    await sendManualReport(ctx, 'daily');
+});
+
+bot.command('stats_weekly', async (ctx) => {
+    await sendManualReport(ctx, 'weekly');
+});
+
+bot.command('stats_monthly', async (ctx) => {
+    await sendManualReport(ctx, 'monthly');
+});
+
 
 // ============================================
 // ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ (ССЫЛОК)
@@ -56,6 +75,8 @@ bot.catch(handleBotError);
 bot.launch()
     .then(() => {
         log('success', `Bot started successfully! Subscription check: ${config.CHECK_SUBSCRIPTION ? 'ENABLED' : 'DISABLED'}`);
+        initScheduler(bot);
+        console.log('\n' + '='.repeat(50));
         console.log('\n' + '='.repeat(50));
         console.log('🤖 BOT CONFIGURATION:');
         console.log('='.repeat(50));

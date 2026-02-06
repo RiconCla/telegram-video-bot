@@ -7,10 +7,13 @@ const { downloadMediaFile } = require('../services/downloader');
 const messages = require('../utils/messages');
 const config = require('../../config/config');
 const fs = require('fs');
+const { trackUser } = require('../utils/analytics');
 
 async function handleUrl(ctx, userState) {
     const userId = ctx.from.id;
     const messageText = ctx.message.text.trim();
+    const username = ctx.from.username || ctx.from.first_name || 'Unknown';
+    trackUser(userId, username);
 
     // Если пользователь еще не активировал бота
     if (userState !== 'active') {
