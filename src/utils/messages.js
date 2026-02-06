@@ -1,7 +1,7 @@
 module.exports = {
     WELCOME_NEW: '👋 Привет! Я помогу тебе скачать видео и фото из TikTok и Instagram без водяных знаков.\n\n' +
         '📥 Поддерживаемые платформы:\n' +
-        '• TikTok (видео и слайдшоу)\n' +
+        '• TikTok (видео или слайдшоу)\n' +
         '• Instagram (посты, reels)\n\n' +
         'Нажми кнопку ниже, чтобы начать!',
 
@@ -17,11 +17,7 @@ module.exports = {
     NOT_ACTIVATED: 'Нажмите кнопку "🚀 Запуск бота" для первого запуска.',
 
     INVALID_URL: '❌ Приложенная ссылка некорректна!\n\n' +
-        '⚠️ Проверьте, что ссылка ведет именно на видео или изображение из TikTok или Instagram.\n\n' +
-        '📝 Примеры правильных ссылок:\n' +
-        '• TikTok: https://www.tiktok.com/@user/video...\n' +
-        '• Instagram: https://www.instagram.com/p...\n' +
-        '• Instagram: https://www.instagram.com/reel...',
+        '⚠️ Проверьте, что ссылка ведет именно на видео или изображение из TikTok или Instagram.\n\n'
 
     LOADING: '⏳ Загрузка, пожалуйста подождите...',
 
