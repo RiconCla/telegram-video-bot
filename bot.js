@@ -8,6 +8,7 @@ const { handleUrl } = require('./src/handlers/url');
 const { handleBotError } = require('./src/handlers/error');
 const { initScheduler, sendManualReport } = require('./src/services/scheduler');
 const { trackUser } = require('./src/utils/analytics');
+const { runHealthcheck } = require('./src/services/tiktokHealthcheck');
 
 // Создаем бота
 const bot = new Telegraf(config.BOT_TOKEN);
@@ -42,6 +43,20 @@ bot.command('stats_weekly', async (ctx) => {
 
 bot.command('stats_monthly', async (ctx) => {
     await sendManualReport(ctx, 'monthly');
+});
+
+bot.command('check_tiktok', async (ctx) => {
+    const userId = ctx.from.id.toString();
+
+    // Только для администратора
+    if (config.ADMIN_ID && userId !== config.ADMIN_ID.toString()) {
+        await ctx.reply('❌ У вас нет прав для этой команды.');
+        return;
+    }
+
+    await ctx.reply('🔍 Запускаю проверку TikTok API...');
+    await runHealthcheck(bot);
+    await ctx.reply('✅ Проверка завершена. Смотрите логи для деталей.');
 });
 
 

@@ -1,6 +1,7 @@
 const axios = require('axios');
 const config = require('../../config/config');
 const { log } = require('../utils/logger');
+const { getCurrentPriority } = require('./tiktokHealthcheck');
 
 async function downloadTiktok(url, userId) {
     try {
@@ -29,17 +30,42 @@ async function downloadTiktok(url, userId) {
                 };
             }
 
-            // ПОТОМ проверяем видео
-            if (data.play) {
-                log('success', 'TikTok video download successful', userId);
-                log('info', `Video URL: ${data.play.substring(0, 100)}...`, userId);
+            // ПОТОМ проверяем видео с ДИНАМИЧЕСКИМ приоритетом
+            const priority = getCurrentPriority();
+            log('info', `Using TikTok priority: ${priority.join(' > ')}`, userId);
+
+            let videoUrl = null;
+            let videoType = null;
+
+            // Проходим по приоритету и выбираем первый доступный URL
+            for (const type of priority) {
+                if (data[type]) {
+                    videoUrl = data[type];
+                    videoType = type;
+                    break;
+                }
+            }
+
+            if (videoUrl) {
+                log('success', `TikTok video download successful (${videoType})`, userId);
+                log('info', `Video URL: ${videoUrl.substring(0, 100)}...`, userId);
+
+                // Проверяем, что URL не пустой и начинается с http
+                if (!videoUrl.startsWith('http')) {
+                    log('error', `Invalid video URL: ${videoUrl}`, userId);
+                    return { success: false };
+                }
+
                 return {
                     success: true,
                     type: 'video',
-                    url: data.hdplay || data.play,
+                    url: videoUrl,
                     thumbnail: data.cover
                 };
             }
+
+            // Если ничего не найдено
+            log('warning', 'TikTok download failed: No valid media found in response', userId);
         }
 
         log('warning', 'TikTok download failed: Invalid API response', userId);

@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const config = require('../../config/config');
 const { log } = require('../utils/logger');
 const { getStats, resetStats } = require('../utils/analytics');
+const { runHealthcheck } = require('./tiktokHealthcheck');
 
 let bot = null;
 
@@ -84,15 +85,12 @@ function initScheduler(botInstance) {
     // Определяем cron выражение в зависимости от периодичности
     switch (config.REPORT_FREQUENCY) {
         case 'daily':
-            // Каждый день в указанное время
             cronExpression = `${minutes} ${hours} * * *`;
             break;
         case 'weekly':
-            // Каждый понедельник в указанное время
             cronExpression = `${minutes} ${hours} * * 1`;
             break;
         case 'monthly':
-            // 1-го числа каждого месяца в указанное время
             cronExpression = `${minutes} ${hours} 1 * *`;
             break;
         default:
@@ -103,7 +101,7 @@ function initScheduler(botInstance) {
     log('info', `Scheduling reports: ${config.REPORT_FREQUENCY} at ${config.REPORT_TIME} ${config.REPORT_TIMEZONE}`);
     log('info', `Cron expression: ${cronExpression}`);
 
-    // Создаём задачу [web:67]
+    // Создаём задачу статистики
     cron.schedule(cronExpression, () => {
         log('info', `Sending ${config.REPORT_FREQUENCY} report...`);
         sendReport(config.REPORT_FREQUENCY);
@@ -113,6 +111,23 @@ function initScheduler(botInstance) {
     });
 
     log('success', `Report scheduler initialized successfully!`);
+
+    // Планируем проверку TikTok API каждые 4 часа
+    cron.schedule('0 */4 * * *', () => {
+        log('info', 'Running scheduled TikTok API healthcheck...');
+        runHealthcheck(bot);
+    }, {
+        scheduled: true,
+        timezone: config.REPORT_TIMEZONE
+    });
+
+    log('success', 'TikTok healthcheck scheduler initialized (every 4 hours)');
+
+    // Запускаем первую проверку через 1 минуту после старта
+    setTimeout(() => {
+        log('info', 'Running initial TikTok API healthcheck...');
+        runHealthcheck(bot);
+    }, 60000);
 }
 
 // Отправка отчёта по команде (для тестирования)
