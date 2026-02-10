@@ -21,23 +21,25 @@ async function downloadMediaFile(url, userId, filename, useProxy = false) {
         // Уникальное имя файла
         const filePath = path.join(config.TEMP_DIR, `${userId}_${Date.now()}_${filename}`);
 
-        // Конфигурация axios
+        // Конфигурация axios с оптимизацией
         const axiosConfig = {
             method: 'GET',
             url: url,
             responseType: 'stream',
-            timeout: 120000,
+            timeout: 60000, // 60 секунд на скачивание (было 120)
             maxRedirects: 5,
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                 'Accept': '*/*',
                 'Accept-Encoding': 'gzip, deflate, br',
                 'Connection': 'keep-alive',
                 'Referer': 'https://www.tiktok.com/'
-            }
+            },
+            maxContentLength: 50 * 1024 * 1024, // Макс 50MB (Telegram limit)
+            maxBodyLength: 50 * 1024 * 1024
         };
 
-        // Используем прокси ТОЛЬКО для Instagram
+        // Используем прокси если нужно
         if (useProxy && config.SHADOWSOCKS.HOST && config.SHADOWSOCKS.PORT) {
             const { SocksProxyAgent } = require('socks-proxy-agent');
             const proxyUrl = `socks5://${config.SHADOWSOCKS.HOST}:${config.SHADOWSOCKS.PORT}`;
@@ -57,6 +59,12 @@ async function downloadMediaFile(url, userId, filename, useProxy = false) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
+        // Проверяем размер заранее
+        const contentLength = parseInt(response.headers['content-length'] || '0');
+        if (contentLength > 50 * 1024 * 1024) {
+            throw new Error(`File too large: ${(contentLength / 1024 / 1024).toFixed(2)} MB (max 50 MB)`);
+        }
+
         // Создаем write stream
         const writer = fs.createWriteStream(filePath);
         response.data.pipe(writer);
@@ -64,9 +72,17 @@ async function downloadMediaFile(url, userId, filename, useProxy = false) {
         // Ждем завершения загрузки
         await new Promise((resolve, reject) => {
             let downloadedBytes = 0;
+            let lastLogTime = Date.now();
 
             response.data.on('data', (chunk) => {
                 downloadedBytes += chunk.length;
+
+                // Логируем прогресс каждые 2 секунды
+                const now = Date.now();
+                if (now - lastLogTime > 2000) {
+                    log('info', `Downloaded: ${(downloadedBytes / 1024 / 1024).toFixed(2)} MB`, userId);
+                    lastLogTime = now;
+                }
             });
 
             writer.on('finish', () => {
@@ -103,11 +119,11 @@ async function downloadMediaFile(url, userId, filename, useProxy = false) {
 
         if (error.response) {
             log('error', `HTTP Status: ${error.response.status}`, userId);
-            log('error', `HTTP Headers: ${JSON.stringify(error.response.headers)}`, userId);
         }
 
         throw error;
     }
 }
+
 
 module.exports = { downloadMediaFile };

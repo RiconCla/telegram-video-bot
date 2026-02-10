@@ -77,13 +77,18 @@ async function handleVideo(ctx, result, validation, userId, loadingMsg) {
     log('info', 'Sending video to user', userId);
 
     try {
+        // Определяем, нужен ли прокси (для Instagram всегда, для TikTok - попробуем без)
+        const useProxy = validation.isInstagram;
+
+        log('info', `Downloading video (proxy: ${useProxy})`, userId);
+        const videoPath = await downloadMediaFile(result.url, userId, 'video.mp4', useProxy);
+
         await editMessage(ctx, loadingMsg, messages.SENDING_VIDEO);
 
         const startTime = Date.now();
 
-        // Отправляем видео напрямую по URL (Telegram сам скачает)
         await ctx.replyWithVideo(
-            { url: result.url },
+            Input.fromLocalFile(videoPath),
             { caption: messages.VIDEO_DOWNLOADED }
         );
 
@@ -91,26 +96,42 @@ async function handleVideo(ctx, result, validation, userId, loadingMsg) {
         log('success', `Video sent successfully in ${uploadTime}s`, userId);
 
     } catch (sendError) {
-        log('error', `Failed to send video by URL: ${sendError.message}`, userId);
+        log('error', `Failed to send video: ${sendError.message}`, userId);
 
-        // Fallback: скачиваем и отправляем локально
-        log('warning', 'Trying fallback: download and send from local file', userId);
-        try {
-            const useProxy = validation.isInstagram;
-            const videoPath = await downloadMediaFile(result.url, userId, 'video.mp4', useProxy);
+        // Если первая попытка не удалась и это был TikTok без прокси
+        if (validation.isTiktok && !validation.isInstagram) {
+            log('warning', 'Trying to re-download TikTok video through proxy...', userId);
+            try {
+                // Удаляем старый файл если есть
+                const oldPath = `${config.TEMP_DIR}/${userId}_*_video.mp4`;
+                const { execSync } = require('child_process');
+                try {
+                    execSync(`rm -f ${oldPath}`);
+                } catch (e) {}
 
-            await ctx.replyWithVideo(
-                Input.fromLocalFile(videoPath),
-                { caption: messages.VIDEO_DOWNLOADED }
-            );
+                // Пробуем скачать через прокси
+                const videoPath = await downloadMediaFile(result.url, userId, 'video_proxy.mp4', true);
 
-            log('success', 'Video sent successfully (fallback method)', userId);
-        } catch (fallbackError) {
-            log('error', `Fallback also failed: ${fallbackError.message}`, userId);
-            throw fallbackError;
+                await editMessage(ctx, loadingMsg, messages.SENDING_VIDEO);
+
+                const startTime = Date.now();
+                await ctx.replyWithVideo(
+                    Input.fromLocalFile(videoPath),
+                    { caption: messages.VIDEO_DOWNLOADED }
+                );
+
+                const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
+                log('success', `Video sent successfully in ${uploadTime}s (via proxy)`, userId);
+                return;
+            } catch (proxyError) {
+                log('error', `Proxy attempt also failed: ${proxyError.message}`, userId);
+            }
         }
+
+        throw sendError;
     }
 }
+
 
 
 async function handleImages(ctx, result, validation, userId, loadingMsg) {
