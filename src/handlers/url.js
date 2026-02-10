@@ -77,21 +77,41 @@ async function handleVideo(ctx, result, validation, userId, loadingMsg) {
     log('info', 'Sending video to user', userId);
 
     try {
-        const useProxy = validation.isInstagram;
-        const videoPath = await downloadMediaFile(result.url, userId, 'video.mp4', useProxy);
-
         await editMessage(ctx, loadingMsg, messages.SENDING_VIDEO);
 
+        const startTime = Date.now();
+
+        // Отправляем видео напрямую по URL (Telegram сам скачает)
         await ctx.replyWithVideo(
-            Input.fromLocalFile(videoPath),
+            { url: result.url },
             { caption: messages.VIDEO_DOWNLOADED }
         );
-        log('success', 'Video sent successfully', userId);
+
+        const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
+        log('success', `Video sent successfully in ${uploadTime}s`, userId);
+
     } catch (sendError) {
-        log('error', `Failed to send video: ${sendError.message}`, userId);
-        throw sendError;
+        log('error', `Failed to send video by URL: ${sendError.message}`, userId);
+
+        // Fallback: скачиваем и отправляем локально
+        log('warning', 'Trying fallback: download and send from local file', userId);
+        try {
+            const useProxy = validation.isInstagram;
+            const videoPath = await downloadMediaFile(result.url, userId, 'video.mp4', useProxy);
+
+            await ctx.replyWithVideo(
+                Input.fromLocalFile(videoPath),
+                { caption: messages.VIDEO_DOWNLOADED }
+            );
+
+            log('success', 'Video sent successfully (fallback method)', userId);
+        } catch (fallbackError) {
+            log('error', `Fallback also failed: ${fallbackError.message}`, userId);
+            throw fallbackError;
+        }
     }
 }
+
 
 async function handleImages(ctx, result, validation, userId, loadingMsg) {
     if (Array.isArray(result.url)) {
