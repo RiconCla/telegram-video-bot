@@ -11,8 +11,9 @@ const { trackUser } = require('./src/utils/analytics');
 const { runHealthcheck } = require('./src/services/tiktokHealthcheck');
 
 // Создаем бота
-const bot = new Telegraf(config.BOT_TOKEN);
-
+const bot = new Telegraf(config.BOT_TOKEN, {
+    handlerTimeout: 5 * 60 * 1000 // 5 минут вместо 90 секунд
+});
 // ============================================
 // MIDDLEWARE
 // ============================================
