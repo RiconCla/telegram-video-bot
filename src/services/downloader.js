@@ -35,8 +35,8 @@ async function downloadMediaFile(url, userId, filename, useProxy = false) {
                 'Connection': 'keep-alive',
                 'Referer': 'https://www.tiktok.com/'
             },
-            maxContentLength: 50 * 1024 * 1024, // Макс 50MB (Telegram limit)
-            maxBodyLength: 50 * 1024 * 1024
+            maxContentLength: 200 * 1024 * 1024, // Макс 50MB (Telegram limit)
+            maxBodyLength: 200 * 1024 * 1024
         };
 
         // Используем прокси если нужно
@@ -61,8 +61,8 @@ async function downloadMediaFile(url, userId, filename, useProxy = false) {
 
         // Проверяем размер заранее
         const contentLength = parseInt(response.headers['content-length'] || '0');
-        if (contentLength > 50 * 1024 * 1024) {
-            throw new Error(`File too large: ${(contentLength / 1024 / 1024).toFixed(2)} MB (max 50 MB)`);
+        if (contentLength > 200 * 1024 * 1024) {
+            throw new Error(`File too large: ${(contentLength / 1024 / 1024).toFixed(2)} MB (max 200 MB)`);
         }
 
         // Создаем write stream

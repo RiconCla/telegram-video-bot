@@ -6,6 +6,10 @@ const { runHealthcheck } = require('./tiktokHealthcheck');
 
 let bot = null;
 
+function escapeMarkdown(text) {
+    return String(text).replace(/[_*`\[]/g, '\\$&');
+}
+
 // Форматирование отчёта
 function formatReport(stats) {
     const { period, activeUsers, totalUsers, userList } = stats;
@@ -30,7 +34,7 @@ function formatReport(stats) {
     if (userList.length > 0) {
         message += `📋 *Список пользователей:*\n`;
         userList.forEach((user, index) => {
-            const username = user.username !== 'Unknown' ? `@${user.username}` : `User ${index + 1}`;
+            const username = user.username !== 'Unknown' ? `@${escapeMarkdown(user.username)}` : `User ${index + 1}`;
             message += `${index + 1}. ${username} — ${user.requests} запросов\n`;
         });
     } else {

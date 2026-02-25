@@ -8,6 +8,7 @@ const messages = require('../utils/messages');
 const config = require('../../config/config');
 const fs = require('fs');
 const { trackUser } = require('../utils/analytics');
+const { compressVideo } = require('../utils/compressor');
 
 async function handleUrl(ctx, userState) {
     const userId = ctx.from.id;
@@ -82,13 +83,15 @@ async function handleVideo(ctx, result, validation, userId, loadingMsg) {
 
         log('info', `Downloading video (proxy: ${useProxy})`, userId);
         const videoPath = await downloadMediaFile(result.url, userId, 'video.mp4', useProxy);
-
+        const finalPath = await compressVideo(videoPath, userId);
+// Удаляем оригинал если он был сжат
+        if (finalPath !== videoPath && fs.existsSync(videoPath)) {
+            fs.unlinkSync(videoPath);
+        }
         await editMessage(ctx, loadingMsg, messages.SENDING_VIDEO);
-
         const startTime = Date.now();
-
         await ctx.replyWithVideo(
-            Input.fromLocalFile(videoPath),
+            Input.fromLocalFile(finalPath),
             { caption: messages.VIDEO_DOWNLOADED }
         );
 
@@ -111,12 +114,14 @@ async function handleVideo(ctx, result, validation, userId, loadingMsg) {
 
                 // Пробуем скачать через прокси
                 const videoPath = await downloadMediaFile(result.url, userId, 'video_proxy.mp4', true);
-
+                const finalPath = await compressVideo(videoPath, userId);
+                if (finalPath !== videoPath && fs.existsSync(videoPath)) {
+                    fs.unlinkSync(videoPath);
+                }
                 await editMessage(ctx, loadingMsg, messages.SENDING_VIDEO);
-
                 const startTime = Date.now();
                 await ctx.replyWithVideo(
-                    Input.fromLocalFile(videoPath),
+                    Input.fromLocalFile(finalPath),
                     { caption: messages.VIDEO_DOWNLOADED }
                 );
 

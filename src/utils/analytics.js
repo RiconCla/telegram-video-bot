@@ -1,40 +1,80 @@
 const { log } = require('./logger');
+const fs = require('fs');
+const path = require('path');
 
-// Хранилище статистики пользователей (в памяти)
-// В production лучше использовать базу данных
-const userStats = new Map();
-const dailyUsers = new Set();
-const weeklyUsers = new Set();
-const monthlyUsers = new Set();
+const STATS_FILE = path.resolve(__dirname, '../../data/stats.json');
 
-// Статистика по дням
-const statsHistory = {
-    daily: [],
-    weekly: [],
-    monthly: []
-};
+// --- Персистентность ---
+function ensureDataDir() {
+    const dir = path.dirname(STATS_FILE);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+}
 
-// Добавить пользователя в статистику
+function loadFromFile() {
+    try {
+        ensureDataDir();
+        if (fs.existsSync(STATS_FILE)) {
+            const data = JSON.parse(fs.readFileSync(STATS_FILE, 'utf-8'));
+            const loadedStats = new Map(Object.entries(data.userStats || {}));
+            loadedStats.forEach(user => {
+                user.firstSeen = new Date(user.firstSeen);
+                user.lastSeen = new Date(user.lastSeen);
+            });
+            return {
+                userStats: loadedStats,
+                dailyUsers: new Set(data.dailyUsers || []),
+                weeklyUsers: new Set(data.weeklyUsers || []),
+                monthlyUsers: new Set(data.monthlyUsers || []),
+                statsHistory: data.statsHistory || { daily: [], weekly: [], monthly: [] }
+            };
+        }
+    } catch (e) {
+        log('error', `Failed to load stats from file: ${e.message}`);
+    }
+    return null;
+}
+
+function saveToFile() {
+    try {
+        ensureDataDir();
+        const data = {
+            userStats: Object.fromEntries(userStats),
+            dailyUsers: [...dailyUsers],
+            weeklyUsers: [...weeklyUsers],
+            monthlyUsers: [...monthlyUsers],
+            statsHistory
+        };
+        fs.writeFileSync(STATS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (e) {
+        log('error', `Failed to save stats to file: ${e.message}`);
+    }
+}
+
+// --- Загрузка при старте ---
+const saved = loadFromFile();
+const userStats    = saved ? saved.userStats    : new Map();
+const dailyUsers   = saved ? saved.dailyUsers   : new Set();
+const weeklyUsers  = saved ? saved.weeklyUsers  : new Set();
+const monthlyUsers = saved ? saved.monthlyUsers : new Set();
+const statsHistory = saved ? saved.statsHistory : { daily: [], weekly: [], monthly: [] };
+
+// --- Основные функции (без изменений логики, добавлен saveToFile) ---
 function trackUser(userId, username) {
     const now = new Date();
     const userKey = userId.toString();
 
-    // Инициализируем пользователя, если его нет
     if (!userStats.has(userKey)) {
         userStats.set(userKey, {
-            userId: userId,
-            username: username || 'Unknown',
-            firstSeen: now,
-            lastSeen: now,
+            userId, username: username || 'Unknown',
+            firstSeen: now, lastSeen: now,
             totalRequests: 0,
-            dailyRequests: 0,
-            weeklyRequests: 0,
-            monthlyRequests: 0
+            dailyRequests: 0, weeklyRequests: 0, monthlyRequests: 0
         });
         log('info', `New user tracked: @${username || userId}`, userId);
     }
 
-    // Обновляем статистику
     const user = userStats.get(userKey);
     user.lastSeen = now;
     user.totalRequests++;
@@ -42,124 +82,49 @@ function trackUser(userId, username) {
     user.weeklyRequests++;
     user.monthlyRequests++;
 
-    // Добавляем в активные наборы
     dailyUsers.add(userKey);
     weeklyUsers.add(userKey);
     monthlyUsers.add(userKey);
 
-    log('info', `User activity tracked: @${user.username}, total requests: ${user.totalRequests}`, userId);
+    log('info', `User activity tracked: @${user.username}, total: ${user.totalRequests}`, userId);
+    saveToFile(); // 💾 Сохраняем после каждого трекинга
 }
 
-// Получить статистику за период
 function getStats(period = 'daily') {
     let activeUsers;
     let userList = [];
 
-    switch (period) {
-        case 'daily':
-            activeUsers = dailyUsers.size;
-            dailyUsers.forEach(userKey => {
-                const user = userStats.get(userKey);
-                if (user) {
-                    userList.push({
-                        username: user.username,
-                        requests: user.dailyRequests
-                    });
-                }
-            });
-            break;
-        case 'weekly':
-            activeUsers = weeklyUsers.size;
-            weeklyUsers.forEach(userKey => {
-                const user = userStats.get(userKey);
-                if (user) {
-                    userList.push({
-                        username: user.username,
-                        requests: user.weeklyRequests
-                    });
-                }
-            });
-            break;
-        case 'monthly':
-            activeUsers = monthlyUsers.size;
-            monthlyUsers.forEach(userKey => {
-                const user = userStats.get(userKey);
-                if (user) {
-                    userList.push({
-                        username: user.username,
-                        requests: user.monthlyRequests
-                    });
-                }
-            });
-            break;
-    }
+    const sets = { daily: dailyUsers, weekly: weeklyUsers, monthly: monthlyUsers };
+    const reqFields = { daily: 'dailyRequests', weekly: 'weeklyRequests', monthly: 'monthlyRequests' };
 
-    // Сортируем по количеству запросов (от большего к меньшему)
+    activeUsers = sets[period].size;
+    sets[period].forEach(userKey => {
+        const user = userStats.get(userKey);
+        if (user) userList.push({ username: user.username, requests: user[reqFields[period]] });
+    });
+
     userList.sort((a, b) => b.requests - a.requests);
-
-    return {
-        period: period,
-        activeUsers: activeUsers,
-        totalUsers: userStats.size,
-        userList: userList
-    };
+    return { period, activeUsers, totalUsers: userStats.size, userList };
 }
 
-// Сброс статистики за период
 function resetStats(period) {
-    switch (period) {
-        case 'daily':
-            // Сохраняем в историю перед сбросом
-            const dailyStats = getStats('daily');
-            statsHistory.daily.push({
-                date: new Date(),
-                stats: dailyStats
-            });
+    const stats = getStats(period);
+    statsHistory[period].push({ date: new Date(), stats });
 
-            // Сбрасываем счётчики
-            userStats.forEach(user => {
-                user.dailyRequests = 0;
-            });
-            dailyUsers.clear();
-            log('info', `Daily stats reset. ${dailyStats.activeUsers} users tracked.`);
-            break;
+    const reqField = { daily: 'dailyRequests', weekly: 'weeklyRequests', monthly: 'monthlyRequests' }[period];
+    const set = { daily: dailyUsers, weekly: weeklyUsers, monthly: monthlyUsers }[period];
 
-        case 'weekly':
-            const weeklyStats = getStats('weekly');
-            statsHistory.weekly.push({
-                date: new Date(),
-                stats: weeklyStats
-            });
+    userStats.forEach(user => { user[reqField] = 0; });
+    set.clear();
 
-            userStats.forEach(user => {
-                user.weeklyRequests = 0;
-            });
-            weeklyUsers.clear();
-            log('info', `Weekly stats reset. ${weeklyStats.activeUsers} users tracked.`);
-            break;
-
-        case 'monthly':
-            const monthlyStats = getStats('monthly');
-            statsHistory.monthly.push({
-                date: new Date(),
-                stats: monthlyStats
-            });
-
-            userStats.forEach(user => {
-                user.monthlyRequests = 0;
-            });
-            monthlyUsers.clear();
-            log('info', `Monthly stats reset. ${monthlyStats.activeUsers} users tracked.`);
-            break;
-    }
-
-    // Ограничиваем историю (храним только последние 30 записей)
     if (statsHistory[period].length > 30) {
         statsHistory[period] = statsHistory[period].slice(-30);
     }
+
+    log('info', `${period} stats reset. ${stats.activeUsers} users tracked.`);
+    saveToFile(); // 💾 Сохраняем после сброса
 }
 
-// Получить полную статистику
 function getAllStats() {
     return {
         daily: getStats('daily'),
@@ -169,9 +134,4 @@ function getAllStats() {
     };
 }
 
-module.exports = {
-    trackUser,
-    getStats,
-    resetStats,
-    getAllStats
-};
+module.exports = { trackUser, getStats, resetStats, getAllStats };
