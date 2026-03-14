@@ -9,7 +9,20 @@ const { handleBotError } = require('./src/handlers/error');
 const { initScheduler, sendManualReport } = require('./src/services/scheduler');
 const { trackUser } = require('./src/utils/analytics');
 const { runHealthcheck } = require('./src/services/tiktokHealthcheck');
-const bot = new Telegraf(config.BOT_TOKEN, { handlerTimeout: 15 * 60 * 1000 });
+const { SocksProxyAgent } = require('socks-proxy-agent');
+
+// Прокси для Telegram API (обязательно для серверов в РФ)
+const botOptions = { handlerTimeout: 15 * 60 * 1000 };
+
+if (config.PROXY_HOST && config.PROXY_PORT) {
+    const agent = new SocksProxyAgent(`socks5://${config.PROXY_HOST}:${config.PROXY_PORT}`);
+    botOptions.telegram = { agent };
+    console.log(`🔒 Telegram API → proxy: ${config.PROXY_HOST}:${config.PROXY_PORT}`);
+} else {
+    console.log('⚠️  No proxy configured — Telegram API direct (may fail in RU)');
+}
+
+const bot = new Telegraf(config.BOT_TOKEN, botOptions);
 
 
 // ============================================
