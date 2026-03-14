@@ -34,8 +34,18 @@ function formatReport(stats) {
     if (userList.length > 0) {
         message += `📋 *Список пользователей:*\n`;
         userList.forEach((user, index) => {
-            const username = user.username !== 'Unknown' ? `@${escapeMarkdown(user.username)}` : `User ${index + 1}`;
-            message += `${index + 1}. ${username} — ${user.requests} запросов\n`;
+            let userLink;
+            if (user.userId) {
+                const displayName = (user.username && user.username !== 'Unknown')
+                    ? `@${user.username}`
+                    : `User ${user.userId}`;
+                userLink = `[${displayName}](tg://user?id=${user.userId})`;
+            } else if (user.username && user.username !== 'Unknown') {
+                userLink = `@${escapeMarkdown(user.username)}`;
+            } else {
+                userLink = `User ${index + 1}`;
+            }
+            message += `${index + 1}. ${userLink} — ${user.requests} запросов\n`;
         });
     } else {
         message += `ℹ️ За этот период активности не было.`;

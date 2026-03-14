@@ -100,7 +100,7 @@ function getStats(period = 'daily') {
     activeUsers = sets[period].size;
     sets[period].forEach(userKey => {
         const user = userStats.get(userKey);
-        if (user) userList.push({ username: user.username, requests: user[reqFields[period]] });
+        if (user) userList.push({ userId: user.userId, username: user.username, requests: user[reqFields[period]] });
     });
 
     userList.sort((a, b) => b.requests - a.requests);
