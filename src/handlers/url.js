@@ -77,67 +77,32 @@ async function handleUrl(ctx, userState) {
 async function handleVideo(ctx, result, validation, userId, loadingMsg) {
     log('info', 'Sending video to user', userId);
 
-    try {
-        // Определяем, нужен ли прокси (для Instagram всегда, для TikTok - попробуем без)
-        const useProxy = validation.isInstagram;
-
-        log('info', `Downloading video (proxy: ${useProxy})`, userId);
-        const videoPath = await downloadMediaFile(result.url, userId, 'video.mp4', useProxy);
-        const finalPath = await compressVideo(videoPath, userId);
-// Удаляем оригинал если он был сжат
+    // Для Instagram файл уже скачан локально через yt-dlp
+    // Для TikTok нужно скачать по URL
+    let finalPath;
+    if (validation.isInstagram) {
+        finalPath = await compressVideo(result.url, userId);
+        if (finalPath !== result.url && fs.existsSync(result.url)) {
+            fs.unlinkSync(result.url);
+        }
+    } else {
+        const videoPath = await downloadMediaFile(result.url, userId, 'video.mp4');
+        finalPath = await compressVideo(videoPath, userId);
         if (finalPath !== videoPath && fs.existsSync(videoPath)) {
             fs.unlinkSync(videoPath);
         }
-        await editMessage(ctx, loadingMsg, messages.SENDING_VIDEO);
-        const startTime = Date.now();
-        await ctx.replyWithVideo(
-            Input.fromLocalFile(finalPath),
-            { caption: messages.VIDEO_DOWNLOADED }
-        );
-
-        const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
-        log('success', `Video sent successfully in ${uploadTime}s`, userId);
-
-    } catch (sendError) {
-        log('error', `Failed to send video: ${sendError.message}`, userId);
-
-        // Если первая попытка не удалась и это был TikTok без прокси
-        if (validation.isTiktok && !validation.isInstagram) {
-            log('warning', 'Trying to re-download TikTok video through proxy...', userId);
-            try {
-                // Удаляем старый файл если есть
-                const oldPath = `${config.TEMP_DIR}/${userId}_*_video.mp4`;
-                const { execSync } = require('child_process');
-                try {
-                    execSync(`rm -f ${oldPath}`);
-                } catch (e) {}
-
-                // Пробуем скачать через прокси
-                const videoPath = await downloadMediaFile(result.url, userId, 'video_proxy.mp4', true);
-                const finalPath = await compressVideo(videoPath, userId);
-                if (finalPath !== videoPath && fs.existsSync(videoPath)) {
-                    fs.unlinkSync(videoPath);
-                }
-                await editMessage(ctx, loadingMsg, messages.SENDING_VIDEO);
-                const startTime = Date.now();
-                await ctx.replyWithVideo(
-                    Input.fromLocalFile(finalPath),
-                    { caption: messages.VIDEO_DOWNLOADED }
-                );
-
-                const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
-                log('success', `Video sent successfully in ${uploadTime}s (via proxy)`, userId);
-                return;
-            } catch (proxyError) {
-                log('error', `Proxy attempt also failed: ${proxyError.message}`, userId);
-            }
-        }
-
-        throw sendError;
     }
+
+    await editMessage(ctx, loadingMsg, messages.SENDING_VIDEO);
+    const startTime = Date.now();
+    await ctx.replyWithVideo(
+        Input.fromLocalFile(finalPath),
+        { caption: messages.VIDEO_DOWNLOADED }
+    );
+
+    const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
+    log('success', `Video sent successfully in ${uploadTime}s`, userId);
 }
-
-
 
 async function handleImages(ctx, result, validation, userId, loadingMsg) {
     if (Array.isArray(result.url)) {
@@ -157,30 +122,30 @@ async function handleImageCarousel(ctx, result, validation, userId, loadingMsg) 
         const batches = Math.ceil(totalImages / config.BATCH_SIZE);
         let totalSent = 0;
 
-        const useProxyForImages = validation.isInstagram;
-        log('info', `Using proxy for images: ${useProxyForImages}`, userId);
-
         for (let batch = 0; batch < batches; batch++) {
             const startIndex = batch * config.BATCH_SIZE;
             const endIndex = Math.min(startIndex + config.BATCH_SIZE, totalImages);
-            const batchUrls = result.url.slice(startIndex, endIndex);
+            const batchItems = result.url.slice(startIndex, endIndex);
 
             log('info', `Processing batch ${batch + 1}/${batches} (images ${startIndex + 1}-${endIndex})`, userId);
 
-            // Скачиваем изображения
+            // Для Instagram — файлы уже скачаны. Для TikTok — скачиваем по URL.
             const imagePaths = [];
-            for (let i = 0; i < batchUrls.length; i++) {
+            for (let i = 0; i < batchItems.length; i++) {
                 try {
-                    const imageUrl = batchUrls[i];
-                    const imagePath = await downloadMediaFile(
-                        imageUrl,
-                        userId,
-                        `batch${batch}_image_${i}.jpg`,
-                        useProxyForImages
-                    );
+                    let imagePath;
+                    if (validation.isInstagram) {
+                        imagePath = batchItems[i]; // уже локальный путь
+                    } else {
+                        imagePath = await downloadMediaFile(
+                            batchItems[i],
+                            userId,
+                            `batch${batch}_image_${i}.jpg`
+                        );
+                    }
                     imagePaths.push(imagePath);
                 } catch (downloadError) {
-                    log('error', `Failed to download image ${startIndex + i}: ${downloadError.message}`, userId);
+                    log('error', `Failed to get image ${startIndex + i}: ${downloadError.message}`, userId);
                 }
             }
 
@@ -201,14 +166,14 @@ async function handleImageCarousel(ctx, result, validation, userId, loadingMsg) 
                 log('success', `Sent batch ${batch + 1}: ${imagePaths.length} images`, userId);
 
                 // Удаляем файлы после отправки
-                for (const path of imagePaths) {
+                for (const p of imagePaths) {
                     try {
-                        if (fs.existsSync(path)) {
-                            fs.unlinkSync(path);
-                            log('info', `Deleted temp file: ${path.split('/').pop()}`, userId);
+                        if (fs.existsSync(p)) {
+                            fs.unlinkSync(p);
+                            log('info', `Deleted temp file: ${p.split('/').pop()}`, userId);
                         }
                     } catch (deleteError) {
-                        log('warning', `Could not delete file: ${path}`, userId);
+                        log('warning', `Could not delete file: ${p}`, userId);
                     }
                 }
             }
@@ -234,20 +199,18 @@ async function handleImageCarousel(ctx, result, validation, userId, loadingMsg) 
 async function handleSingleImage(ctx, result, validation, userId, loadingMsg) {
     log('info', 'Sending single image to user', userId);
 
-    try {
-        const useProxy = validation.isInstagram;
-        const imagePath = await downloadMediaFile(result.url, userId, 'image.jpg', useProxy);
-
-        await editMessage(ctx, loadingMsg, messages.sendingImage());
-
-        await ctx.replyWithPhoto(
-            Input.fromLocalFile(imagePath),
-            { caption: messages.IMAGE_DOWNLOADED }
-        );
-    } catch (sendError) {
-        log('error', `Failed to send image: ${sendError.message}`, userId);
-        throw sendError;
+    let imagePath;
+    if (validation.isInstagram) {
+        imagePath = result.url; // уже локальный путь
+    } else {
+        imagePath = await downloadMediaFile(result.url, userId, 'image.jpg');
     }
+
+    await editMessage(ctx, loadingMsg, messages.sendingImage());
+    await ctx.replyWithPhoto(
+        Input.fromLocalFile(imagePath),
+        { caption: messages.IMAGE_DOWNLOADED }
+    );
 }
 
 async function editMessage(ctx, message, text) {

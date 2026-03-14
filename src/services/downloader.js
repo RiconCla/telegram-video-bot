@@ -5,7 +5,7 @@ const config = require('../../config/config');
 const { log } = require('../utils/logger');
 const { addUserFile } = require('../utils/fileManager');
 
-async function downloadMediaFile(url, userId, filename, useProxy = false) {
+async function downloadMediaFile(url, userId, filename) {
     try {
         // Валидация URL
         if (!url || typeof url !== 'string') {
@@ -39,19 +39,7 @@ async function downloadMediaFile(url, userId, filename, useProxy = false) {
             maxBodyLength: 200 * 1024 * 1024
         };
 
-        // Используем прокси если нужно
-        if (useProxy && config.SHADOWSOCKS.HOST && config.SHADOWSOCKS.PORT) {
-            const { SocksProxyAgent } = require('socks-proxy-agent');
-            const proxyUrl = `socks5://${config.SHADOWSOCKS.HOST}:${config.SHADOWSOCKS.PORT}`;
-            const agent = new SocksProxyAgent(proxyUrl);
-
-            axiosConfig.httpAgent = agent;
-            axiosConfig.httpsAgent = agent;
-
-            log('info', `Downloading file through Shadowsocks proxy: ${config.SHADOWSOCKS.HOST}:${config.SHADOWSOCKS.PORT}`, userId);
-        } else {
-            log('info', 'Downloading file directly (no proxy)', userId);
-        }
+        log('info', 'Downloading file directly', userId);
 
         const response = await axios(axiosConfig);
 
