@@ -26,11 +26,18 @@ async function downloadInstagram(url, userId) {
     const beforeFiles = new Set(fs.readdirSync(userDir));
     const outputTemplate = path.join(userDir, '%(id)s.%(ext)s');
 
+    // Формируем аргументы yt-dlp (с прокси если настроен)
+    const ytDlpArgs = ['--output', outputTemplate, '--no-warnings'];
+    if (config.PROXY_HOST && config.PROXY_PORT) {
+        ytDlpArgs.push('--proxy', `socks5://${config.PROXY_HOST}:${config.PROXY_PORT}`);
+        log('info', `yt-dlp will use proxy: ${config.PROXY_HOST}:${config.PROXY_PORT}`, userId);
+    }
+
     // Try download (yt-dlp handles video, photo, and carousel automatically)
     let downloadOk = false;
     try {
         log('info', 'Running yt-dlp (attempt 1)', userId);
-        await runYtDlp(['--output', outputTemplate, '--no-warnings', url]);
+        await runYtDlp([...ytDlpArgs, url]);
         downloadOk = true;
     } catch (err1) {
         log('warning', `yt-dlp attempt 1 failed: ${err1.message}`, userId);
