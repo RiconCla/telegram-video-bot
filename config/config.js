@@ -7,14 +7,6 @@ module.exports = {
     REQUIRED_CHANNEL: process.env.REQUIRED_CHANNEL,
     CHECK_SUBSCRIPTION: process.env.CHECK_SUBSCRIPTION === 'true',
 
-    // Shadowsocks
-    SHADOWSOCKS: {
-        HOST: process.env.SHADOWSOCKS_HOST,
-        PORT: process.env.SHADOWSOCKS_PORT,
-        PASSWORD: process.env.SHADOWSOCKS_PASSWORD,
-        METHOD: process.env.SHADOWSOCKS_METHOD
-    },
-
     // Rate Limiting
     RATE_LIMIT: 1000, // миллисекунды
 
@@ -28,8 +20,6 @@ module.exports = {
     TEMP_DIR: path.join(__dirname, '..', 'temp'),
 
     // APIs
-    RAPIDAPI_KEY: 'b7b7194ea4mshb3a8f7d61567aa8p1663f0jsn781d3c4e2970',
-    RAPIDAPI_HOST: 'instagram-downloader-download-instagram-stories-videos4.p.rapidapi.com',
     TIKTOK_API_URL: 'https://tikwm.com/api/',
 
     // Статистика и отчёты

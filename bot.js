@@ -9,29 +9,7 @@ const { handleBotError } = require('./src/handlers/error');
 const { initScheduler, sendManualReport } = require('./src/services/scheduler');
 const { trackUser } = require('./src/utils/analytics');
 const { runHealthcheck } = require('./src/services/tiktokHealthcheck');
-const { SocksProxyAgent } = require('socks-proxy-agent');
-
-
-// Создаём прокси агента для Telegram API
-let telegramApiOptions = {
-    handlerTimeout: 15 * 60 * 1000
-};
-
-if (config.SHADOWSOCKS.HOST && config.SHADOWSOCKS.PORT) {
-    const proxyUrl = `socks5://${config.SHADOWSOCKS.HOST}:${config.SHADOWSOCKS.PORT}`;
-    const agent = new SocksProxyAgent(proxyUrl);
-
-    telegramApiOptions.telegram = {
-        agent: agent
-    };
-
-    console.log(`🔒 Telegram API will use proxy: ${config.SHADOWSOCKS.HOST}:${config.SHADOWSOCKS.PORT}`);
-} else {
-    console.log('ℹ️  Telegram API will work without proxy');
-}
-
-// Создаем бота с прокси
-const bot = new Telegraf(config.BOT_TOKEN, telegramApiOptions);
+const bot = new Telegraf(config.BOT_TOKEN, { handlerTimeout: 15 * 60 * 1000 });
 
 
 // ============================================
