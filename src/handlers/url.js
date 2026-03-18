@@ -1,10 +1,11 @@
 const { Input } = require('telegraf');
+const { Markup } = require('telegraf');
 const { log } = require('../utils/logger');
 const { validateUrl } = require('../middleware/validation');
 const { downloadTiktok } = require('../services/tiktok');
 const { downloadInstagram } = require('../services/instagram');
 const { downloadMediaFile } = require('../services/downloader');
-const messages = require('../utils/messages');
+const { getLocale } = require('../utils/i18n');
 const config = require('../../config/config');
 const fs = require('fs');
 const { trackUser } = require('../utils/analytics');
@@ -14,16 +15,17 @@ async function handleUrl(ctx, userState) {
     const userId = ctx.from.id;
     const messageText = ctx.message.text.trim();
     const username = ctx.from.username || ctx.from.first_name || 'Unknown';
+    const messages = getLocale(userId);
+
     trackUser(userId, username);
 
-    // Если пользователь еще не активировал бота
+    // Если пользователь ещё не активировал бота
     if (userState !== 'active') {
         log('warning', 'User sent message without activating bot', userId);
-        const { Markup } = require('telegraf');
         await ctx.reply(
             messages.NOT_ACTIVATED,
             Markup.keyboard([
-                ['🚀 Запуск бота']
+                [messages.LAUNCH_BUTTON]
             ]).resize()
         );
         return;
@@ -54,31 +56,29 @@ async function handleUrl(ctx, userState) {
 
         if (result.success) {
             if (result.type === 'video') {
-                await handleVideo(ctx, result, validation, userId, loadingMsg);
+                await handleVideo(ctx, result, validation, userId, loadingMsg, messages);
             } else if (result.type === 'image' || Array.isArray(result.url)) {
-                await handleImages(ctx, result, validation, userId, loadingMsg);
+                await handleImages(ctx, result, validation, userId, loadingMsg, messages);
             }
 
             log('success', 'Media sent successfully', userId);
             await ctx.reply(messages.SEND_NEW_LINK);
 
         } else {
-            await editMessage(ctx, loadingMsg, '❌ Ошибка загрузки');
+            await editMessage(ctx, loadingMsg, '❌');
             log('error', 'Failed to download media', userId);
             await ctx.reply(messages.DOWNLOAD_ERROR);
         }
     } catch (error) {
         log('error', `Processing error: ${error.message}`, userId);
-        await editMessage(ctx, loadingMsg, '❌ Произошла ошибка');
+        await editMessage(ctx, loadingMsg, '❌');
         await ctx.reply(messages.PROCESSING_ERROR);
     }
 }
 
-async function handleVideo(ctx, result, validation, userId, loadingMsg) {
+async function handleVideo(ctx, result, validation, userId, loadingMsg, messages) {
     log('info', 'Sending video to user', userId);
 
-    // Для Instagram файл уже скачан локально через yt-dlp
-    // Для TikTok нужно скачать по URL
     let finalPath;
     if (validation.isInstagram) {
         finalPath = await compressVideo(result.url, userId);
@@ -104,15 +104,15 @@ async function handleVideo(ctx, result, validation, userId, loadingMsg) {
     log('success', `Video sent successfully in ${uploadTime}s`, userId);
 }
 
-async function handleImages(ctx, result, validation, userId, loadingMsg) {
+async function handleImages(ctx, result, validation, userId, loadingMsg, messages) {
     if (Array.isArray(result.url)) {
-        await handleImageCarousel(ctx, result, validation, userId, loadingMsg);
+        await handleImageCarousel(ctx, result, validation, userId, loadingMsg, messages);
     } else {
-        await handleSingleImage(ctx, result, validation, userId, loadingMsg);
+        await handleSingleImage(ctx, result, validation, userId, loadingMsg, messages);
     }
 }
 
-async function handleImageCarousel(ctx, result, validation, userId, loadingMsg) {
+async function handleImageCarousel(ctx, result, validation, userId, loadingMsg, messages) {
     const totalImages = result.url.length;
     log('info', `Sending ${totalImages} images to user as media groups`, userId);
 
@@ -129,13 +129,12 @@ async function handleImageCarousel(ctx, result, validation, userId, loadingMsg) 
 
             log('info', `Processing batch ${batch + 1}/${batches} (images ${startIndex + 1}-${endIndex})`, userId);
 
-            // Для Instagram — файлы уже скачаны. Для TikTok — скачиваем по URL.
             const imagePaths = [];
             for (let i = 0; i < batchItems.length; i++) {
                 try {
                     let imagePath;
                     if (validation.isInstagram) {
-                        imagePath = batchItems[i]; // уже локальный путь
+                        imagePath = batchItems[i];
                     } else {
                         imagePath = await downloadMediaFile(
                             batchItems[i],
@@ -149,7 +148,6 @@ async function handleImageCarousel(ctx, result, validation, userId, loadingMsg) 
                 }
             }
 
-            // Отправляем медиа-группу
             if (imagePaths.length > 0) {
                 const mediaGroup = imagePaths.map((path, index) => ({
                     type: 'photo',
@@ -165,7 +163,6 @@ async function handleImageCarousel(ctx, result, validation, userId, loadingMsg) 
                 totalSent += imagePaths.length;
                 log('success', `Sent batch ${batch + 1}: ${imagePaths.length} images`, userId);
 
-                // Удаляем файлы после отправки
                 for (const p of imagePaths) {
                     try {
                         if (fs.existsSync(p)) {
@@ -178,7 +175,6 @@ async function handleImageCarousel(ctx, result, validation, userId, loadingMsg) 
                 }
             }
 
-            // Пауза между отправками
             if (batch < batches - 1) {
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
@@ -196,12 +192,12 @@ async function handleImageCarousel(ctx, result, validation, userId, loadingMsg) 
     }
 }
 
-async function handleSingleImage(ctx, result, validation, userId, loadingMsg) {
+async function handleSingleImage(ctx, result, validation, userId, loadingMsg, messages) {
     log('info', 'Sending single image to user', userId);
 
     let imagePath;
     if (validation.isInstagram) {
-        imagePath = result.url; // уже локальный путь
+        imagePath = result.url;
     } else {
         imagePath = await downloadMediaFile(result.url, userId, 'image.jpg');
     }

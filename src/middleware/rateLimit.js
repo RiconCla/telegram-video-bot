@@ -1,6 +1,6 @@
 const config = require('../../config/config');
 const { log } = require('../utils/logger');
-const messages = require('../utils/messages');
+const { getLocale } = require('../utils/i18n');
 
 // Хранилище последних запросов пользователей
 const userLastRequest = new Map();
@@ -9,8 +9,11 @@ async function rateLimitMiddleware(ctx, next) {
     const userId = ctx.from?.id;
     if (!userId) return next();
 
-    // Пропускаем проверку для команды /start
-    if (ctx.message?.text === '/start') {
+    // Пропускаем проверку для команды /start и callback-ов выбора языка
+    const text = ctx.message?.text;
+    const callbackData = ctx.callbackQuery?.data;
+
+    if (text === '/start' || callbackData === 'lang_en' || callbackData === 'lang_ru') {
         return next();
     }
 
@@ -20,6 +23,7 @@ async function rateLimitMiddleware(ctx, next) {
     if (lastRequest && (now - lastRequest) < config.RATE_LIMIT) {
         const waitTime = Math.ceil((config.RATE_LIMIT - (now - lastRequest)) / 1000);
         log('warning', `Rate limit exceeded. Wait ${waitTime}s`, userId);
+        const messages = getLocale(userId);
         await ctx.reply(messages.rateLimit(waitTime));
         return;
     }

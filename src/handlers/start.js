@@ -1,29 +1,61 @@
 const { Markup } = require('telegraf');
 const { log } = require('../utils/logger');
 const { checkSubscription } = require('../middleware/subscription');
-const messages = require('../utils/messages');
+const { getLocale, setLanguage, hasLanguage } = require('../utils/i18n');
+const en = require('../locales/en');
 const config = require('../../config/config');
 
 // Хранилище состояний пользователей
 const userStates = new Map();
 
-// Команда /start
+// ─────────────────────────────────────────────
+// /start — экран выбора языка
+// ─────────────────────────────────────────────
 async function handleStart(ctx) {
     const userId = ctx.from.id;
     const username = ctx.from.username || ctx.from.first_name;
 
     log('info', `User started bot: @${username}`, userId);
 
-    const isNewUser = !userStates.has(userId);
+    // Всегда показываем экран выбора языка при /start
+    // Приветствие всегда на английском (нейтральный язык по умолчанию)
+    await ctx.reply(
+        en.LANGUAGE_SELECT,
+        Markup.inlineKeyboard([
+            [
+                Markup.button.callback('🇬🇧 English', 'lang_en'),
+                Markup.button.callback('🇷🇺 Русский', 'lang_ru')
+            ]
+        ])
+    );
+}
 
-    if (isNewUser) {
+// ─────────────────────────────────────────────
+// Callback: выбор языка
+// ─────────────────────────────────────────────
+async function handleLanguageSelect(ctx) {
+    const userId = ctx.from.id;
+    const lang = ctx.callbackQuery.data === 'lang_en' ? 'en' : 'ru';
+
+    await ctx.answerCbQuery();
+    setLanguage(userId, lang);
+
+    const messages = getLocale(userId);
+    log('info', `User selected language: ${lang}`, userId);
+
+    // После выбора языка — сразу показываем приветствие нового/вернувшегося пользователя
+    const isNew = !userStates.has(userId);
+
+    if (isNew) {
+        await ctx.editMessageText(messages.LANGUAGE_SELECTED);
         await ctx.reply(
             messages.WELCOME_NEW,
             Markup.keyboard([
-                ['🚀 Запуск бота']
+                [messages.LAUNCH_BUTTON]
             ]).resize()
         );
     } else {
+        await ctx.editMessageText(messages.LANGUAGE_SELECTED);
         await ctx.reply(
             messages.WELCOME_BACK,
             Markup.removeKeyboard()
@@ -31,10 +63,14 @@ async function handleStart(ctx) {
     }
 }
 
-// Обработка кнопки "Запуск бота"
+// ─────────────────────────────────────────────
+// Кнопка "Запуск бота" / "Launch bot"
+// ─────────────────────────────────────────────
 async function handleLaunchButton(ctx) {
     const userId = ctx.from.id;
-    log('info', 'User clicked "Start bot" button', userId);
+    const messages = getLocale(userId);
+
+    log('info', 'User clicked launch button', userId);
 
     const isSubscribed = await checkSubscription(ctx);
 
@@ -43,8 +79,8 @@ async function handleLaunchButton(ctx) {
         await ctx.reply(
             messages.SUBSCRIPTION_REQUIRED,
             Markup.inlineKeyboard([
-                [Markup.button.url('📢 Подписаться', `https://t.me/${config.REQUIRED_CHANNEL.replace('@', '')}`)],
-                [Markup.button.callback('✅ Я подписался', 'check_subscription')]
+                [Markup.button.url('📢 Subscribe', `https://t.me/${config.REQUIRED_CHANNEL.replace('@', '')}`)],
+                [Markup.button.callback('✅ I subscribed', 'check_subscription')]
             ])
         );
         return;
@@ -59,11 +95,14 @@ async function handleLaunchButton(ctx) {
     );
 }
 
-// Обработка callback кнопки проверки подписки
+// ─────────────────────────────────────────────
+// Callback: проверка подписки
+// ─────────────────────────────────────────────
 async function handleCheckSubscription(ctx) {
     const userId = ctx.from.id;
-    await ctx.answerCbQuery();
+    const messages = getLocale(userId);
 
+    await ctx.answerCbQuery();
     log('info', 'User clicked "I subscribed" button', userId);
 
     const isSubscribed = await checkSubscription(ctx);
@@ -90,6 +129,7 @@ function getUserState(userId) {
 
 module.exports = {
     handleStart,
+    handleLanguageSelect,
     handleLaunchButton,
     handleCheckSubscription,
     getUserState

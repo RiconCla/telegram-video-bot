@@ -3,7 +3,13 @@ const config = require('./config/config');
 const { log } = require('./src/utils/logger');
 const { clearAllUserFiles } = require('./src/utils/fileManager');
 const { rateLimitMiddleware } = require('./src/middleware/rateLimit');
-const { handleStart, handleLaunchButton, handleCheckSubscription, getUserState } = require('./src/handlers/start');
+const {
+    handleStart,
+    handleLanguageSelect,
+    handleLaunchButton,
+    handleCheckSubscription,
+    getUserState
+} = require('./src/handlers/start');
 const { handleUrl } = require('./src/handlers/url');
 const { handleBotError } = require('./src/handlers/error');
 const { initScheduler, sendManualReport } = require('./src/services/scheduler');
@@ -37,8 +43,14 @@ bot.use(rateLimitMiddleware);
 
 bot.start(handleStart);
 
-bot.hears('🚀 Запуск бота', handleLaunchButton);
+// Выбор языка (inline кнопки)
+bot.action('lang_en', handleLanguageSelect);
+bot.action('lang_ru', handleLanguageSelect);
 
+// Кнопки запуска (обе локали)
+bot.hears(['🚀 Запуск бота', '🚀 Launch bot'], handleLaunchButton);
+
+// Проверка подписки
 bot.action('check_subscription', handleCheckSubscription);
 
 // ============================================
@@ -60,15 +72,14 @@ bot.command('stats_monthly', async (ctx) => {
 bot.command('check_tiktok', async (ctx) => {
     const userId = ctx.from.id.toString();
 
-    // Только для администратора
     if (config.ADMIN_ID && userId !== config.ADMIN_ID.toString()) {
-        await ctx.reply('❌ У вас нет прав для этой команды.');
+        await ctx.reply('❌ No permission for this command.');
         return;
     }
 
-    await ctx.reply('🔍 Запускаю проверку TikTok API...');
+    await ctx.reply('🔍 Running TikTok API check...');
     await runHealthcheck(bot);
-    await ctx.reply('✅ Проверка завершена. Смотрите логи для деталей.');
+    await ctx.reply('✅ Check complete. See logs for details.');
 });
 
 
@@ -80,8 +91,12 @@ bot.on('text', async (ctx) => {
     const userId = ctx.from.id;
     const messageText = ctx.message.text.trim();
 
-    // Игнорируем команды и кнопки
-    if (messageText.startsWith('/') || messageText === '🚀 Запуск бота') {
+    // Игнорируем команды и кнопки запуска
+    if (
+        messageText.startsWith('/') ||
+        messageText === '🚀 Запуск бота' ||
+        messageText === '🚀 Launch bot'
+    ) {
         return;
     }
 
@@ -103,7 +118,6 @@ bot.launch()
     .then(() => {
         log('success', `Bot started successfully! Subscription check: ${config.CHECK_SUBSCRIPTION ? 'ENABLED' : 'DISABLED'}`);
         initScheduler(bot);
-        console.log('\n' + '='.repeat(50));
         console.log('\n' + '='.repeat(50));
         console.log('🤖 BOT CONFIGURATION:');
         console.log('='.repeat(50));
@@ -143,7 +157,6 @@ process.once('SIGTERM', () => {
     process.exit(0);
 });
 
-// Обработка необработанных ошибок
 process.on('unhandledRejection', (reason, promise) => {
     log('error', `Unhandled Rejection: ${reason}`);
     console.error('Promise:', promise);
