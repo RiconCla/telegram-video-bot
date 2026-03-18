@@ -53,6 +53,25 @@ bot.hears(['🚀 Запуск бота', '🚀 Launch bot'], handleLaunchButton)
 // Проверка подписки
 bot.action('check_subscription', handleCheckSubscription);
 
+// Выбор языка
+bot.action('lang_en', async (ctx) => {
+    await ctx.answerCbQuery('🇬🇧 English selected!');
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    await ctx.reply(
+        '🇬🇧 You\'ve selected English.\n\nNow send me a TikTok or Instagram link to download your video! 🚀',
+        require('telegraf').Markup.removeKeyboard()
+    );
+});
+
+bot.action('lang_ru', async (ctx) => {
+    await ctx.answerCbQuery('🇷🇺 Выбран русский язык!');
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    await ctx.reply(
+        '🇷🇺 Вы выбрали русский язык.\n\nТеперь отправьте мне ссылку на видео из TikTok или Instagram! 🚀',
+        require('telegraf').Markup.removeKeyboard()
+    );
+});
+
 // ============================================
 // КОМАНДЫ СТАТИСТИКИ (только для админа)
 // ============================================
