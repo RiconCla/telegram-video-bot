@@ -1,13 +1,14 @@
 const { log } = require('../utils/logger');
-const messages = require('../utils/messages');
+const { getLocale } = require('../utils/i18n');
 
-function handleBotError(err, ctx) {
+async function handleBotError(err, ctx) {
     const userId = ctx.from?.id;
     log('error', `Bot error: ${err.message}`, userId);
     console.error('Full error:', err);
 
     try {
-        ctx.reply(messages.UNEXPECTED_ERROR);
+        const messages = getLocale(userId);
+        await ctx.reply(messages.UNEXPECTED_ERROR);
     } catch (e) {
         log('error', 'Failed to send error message to user', userId);
     }

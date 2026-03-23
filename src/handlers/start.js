@@ -77,13 +77,26 @@ async function handleLanguageSelect(ctx) {
     const userId = ctx.from.id;
     const lang = ctx.callbackQuery.data === 'lang_en' ? 'en' : 'ru';
 
-    await ctx.answerCbQuery();
+    // Сначала меняем язык — это не должно зависеть от Telegram API
     setLanguage(userId, lang);
-
     const messages = getLocale(userId);
     log('info', `User changed language to: ${lang}`, userId);
 
-    await ctx.editMessageText(messages.LANG_CHANGED);
+    // answerCbQuery — некритичный UI-вызов, ошибка не должна прерывать смену языка
+    try {
+        await ctx.answerCbQuery();
+    } catch (e) {
+        log('warning', `answerCbQuery failed during lang switch: ${e.message}`, userId);
+    }
+
+    // editMessageText может вернуть "message is not modified" — это не ошибка
+    try {
+        await ctx.editMessageText(messages.LANG_CHANGED);
+    } catch (e) {
+        if (!e.message?.includes('message is not modified')) {
+            log('warning', `editMessageText failed during lang switch: ${e.message}`, userId);
+        }
+    }
 }
 
 // ─────────────────────────────────────────────
