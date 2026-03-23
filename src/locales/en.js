@@ -43,6 +43,16 @@ module.exports = {
 
     SEND_NEW_LINK: '💡 Send a new link to download!',
 
+    LANG_MENU_TITLE: '🌐 Select language:',
+
+    LANG_NO_ASK_BUTTON: '🚫 Don\'t ask',
+
+    LANG_NO_ASK_CONFIRMED: '✅ Got it! You can always change the language with /lang.',
+
+    LANG_CHANGED: '✅ Language changed to English!',
+
+    CHANGE_LANGUAGE_BUTTON: '🌐 Change language',
+
     DOWNLOAD_ERROR:
         '❌ Failed to download media. Possible reasons:\n' +
         '• Invalid link\n' +

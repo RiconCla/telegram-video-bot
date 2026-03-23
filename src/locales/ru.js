@@ -43,6 +43,16 @@ module.exports = {
 
     SEND_NEW_LINK: '💡 Отправь новую ссылку для скачивания!',
 
+    LANG_MENU_TITLE: '🌐 Выберите язык:',
+
+    LANG_NO_ASK_BUTTON: '🚫 Не спрашивать',
+
+    LANG_NO_ASK_CONFIRMED: '✅ Принято! Сменить язык всегда можно через /lang.',
+
+    LANG_CHANGED: '✅ Язык изменён на Русский!',
+
+    CHANGE_LANGUAGE_BUTTON: '🌐 Сменить язык',
+
     DOWNLOAD_ERROR:
         '❌ Не удалось скачать медиа. Возможные причины:\n' +
         '• Неверная ссылка\n' +

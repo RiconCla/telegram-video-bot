@@ -1,15 +1,12 @@
 const { Markup } = require('telegraf');
 const { log } = require('../utils/logger');
 const { checkSubscription } = require('../middleware/subscription');
-const { getLocale, setLanguage, hasLanguage } = require('../utils/i18n');
+const { getLocale, setLanguage, hasLanguage, setUserActive } = require('../utils/i18n');
 const en = require('../locales/en');
 const config = require('../../config/config');
 
-// Хранилище состояний пользователей
-const userStates = new Map();
-
 // ─────────────────────────────────────────────
-// /start — экран выбора языка
+// /start — экран выбора языка или приветствие
 // ─────────────────────────────────────────────
 async function handleStart(ctx) {
     const userId = ctx.from.id;
@@ -17,8 +14,15 @@ async function handleStart(ctx) {
 
     log('info', `User started bot: @${username}`, userId);
 
-    // Всегда показываем экран выбора языка при /start
-    // Приветствие всегда на английском (нейтральный язык по умолчанию)
+    if (hasLanguage(userId)) {
+        // Возвращающийся пользователь — пропускаем выбор языка
+        setUserActive(userId);
+        const messages = getLocale(userId);
+        await ctx.reply(messages.WELCOME_BACK, Markup.removeKeyboard());
+        return;
+    }
+
+    // Новый пользователь — показываем выбор языка (всегда на английском)
     await ctx.reply(
         en.LANGUAGE_SELECT,
         Markup.inlineKeyboard([
@@ -31,11 +35,15 @@ async function handleStart(ctx) {
 }
 
 // ─────────────────────────────────────────────
-// Callback: выбор языка
+// Callback: выбор языка (из /start или /lang)
 // ─────────────────────────────────────────────
 async function handleLanguageSelect(ctx) {
     const userId = ctx.from.id;
     const lang = ctx.callbackQuery.data === 'lang_en' ? 'en' : 'ru';
+
+    // Определяем контекст ДО сохранения языка:
+    // если языка ещё нет — пришли из /start (первый раз)
+    const isFirstTime = !hasLanguage(userId);
 
     await ctx.answerCbQuery();
     setLanguage(userId, lang);
@@ -43,10 +51,8 @@ async function handleLanguageSelect(ctx) {
     const messages = getLocale(userId);
     log('info', `User selected language: ${lang}`, userId);
 
-    // После выбора языка — сразу показываем приветствие нового/вернувшегося пользователя
-    const isNew = !userStates.has(userId);
-
-    if (isNew) {
+    if (isFirstTime) {
+        // Первый выбор языка — показываем приветствие + кнопку запуска
         await ctx.editMessageText(messages.LANGUAGE_SELECTED);
         await ctx.reply(
             messages.WELCOME_NEW,
@@ -55,11 +61,8 @@ async function handleLanguageSelect(ctx) {
             ]).resize()
         );
     } else {
-        await ctx.editMessageText(messages.LANGUAGE_SELECTED);
-        await ctx.reply(
-            messages.WELCOME_BACK,
-            Markup.removeKeyboard()
-        );
+        // Смена языка в процессе работы
+        await ctx.editMessageText(messages.LANG_CHANGED);
     }
 }
 
@@ -86,8 +89,8 @@ async function handleLaunchButton(ctx) {
         return;
     }
 
-    userStates.set(userId, 'active');
-    log('info', 'User state changed to: active', userId);
+    setUserActive(userId);
+    log('info', 'User activated bot', userId);
 
     await ctx.reply(
         messages.BOT_ACTIVATED,
@@ -113,7 +116,7 @@ async function handleCheckSubscription(ctx) {
         return;
     }
 
-    userStates.set(userId, 'active');
+    setUserActive(userId);
     log('success', 'Subscription verified successfully', userId);
 
     await ctx.reply(
@@ -122,15 +125,9 @@ async function handleCheckSubscription(ctx) {
     );
 }
 
-// Получить состояние пользователя
-function getUserState(userId) {
-    return userStates.get(userId);
-}
-
 module.exports = {
     handleStart,
     handleLanguageSelect,
     handleLaunchButton,
-    handleCheckSubscription,
-    getUserState
+    handleCheckSubscription
 };

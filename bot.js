@@ -7,10 +7,11 @@ const {
     handleStart,
     handleLanguageSelect,
     handleLaunchButton,
-    handleCheckSubscription,
-    getUserState
+    handleCheckSubscription
 } = require('./src/handlers/start');
+const { handleLangCommand, handleLangChangeMenu, handleNoAskLang } = require('./src/handlers/lang');
 const { handleUrl } = require('./src/handlers/url');
+const { isUserActive } = require('./src/utils/i18n');
 const { handleBotError } = require('./src/handlers/error');
 const { initScheduler, sendManualReport } = require('./src/services/scheduler');
 const { trackUser } = require('./src/utils/analytics');
@@ -46,6 +47,11 @@ bot.start(handleStart);
 // Выбор языка (inline кнопки)
 bot.action('lang_en', handleLanguageSelect);
 bot.action('lang_ru', handleLanguageSelect);
+
+// Смена языка
+bot.command('lang', handleLangCommand);
+bot.action('lang_change_menu', handleLangChangeMenu);
+bot.action('lang_no_ask', handleNoAskLang);
 
 // Кнопки запуска (обе локали)
 bot.hears(['🚀 Запуск бота', '🚀 Launch bot'], handleLaunchButton);
@@ -100,8 +106,7 @@ bot.on('text', async (ctx) => {
         return;
     }
 
-    const userState = getUserState(userId);
-    await handleUrl(ctx, userState);
+    await handleUrl(ctx, isUserActive(userId));
 });
 
 // ============================================

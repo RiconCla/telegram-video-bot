@@ -5,13 +5,13 @@ const { validateUrl } = require('../middleware/validation');
 const { downloadTiktok } = require('../services/tiktok');
 const { downloadInstagram } = require('../services/instagram');
 const { downloadMediaFile } = require('../services/downloader');
-const { getLocale } = require('../utils/i18n');
+const { getLocale, hasNoAskLang } = require('../utils/i18n');
 const config = require('../../config/config');
 const fs = require('fs');
 const { trackUser } = require('../utils/analytics');
 const { compressVideo } = require('../utils/compressor');
 
-async function handleUrl(ctx, userState) {
+async function handleUrl(ctx, isActive) {
     const userId = ctx.from.id;
     const messageText = ctx.message.text.trim();
     const username = ctx.from.username || ctx.from.first_name || 'Unknown';
@@ -20,7 +20,7 @@ async function handleUrl(ctx, userState) {
     trackUser(userId, username);
 
     // Если пользователь ещё не активировал бота
-    if (userState !== 'active') {
+    if (!isActive) {
         log('warning', 'User sent message without activating bot', userId);
         await ctx.reply(
             messages.NOT_ACTIVATED,
@@ -62,7 +62,13 @@ async function handleUrl(ctx, userState) {
             }
 
             log('success', 'Media sent successfully', userId);
-            await ctx.reply(messages.SEND_NEW_LINK);
+
+            const sendNewLinkExtra = hasNoAskLang(userId)
+                ? {}
+                : Markup.inlineKeyboard([[
+                    Markup.button.callback(messages.CHANGE_LANGUAGE_BUTTON, 'lang_change_menu')
+                ]]);
+            await ctx.reply(messages.SEND_NEW_LINK, sendNewLinkExtra);
 
         } else {
             await editMessage(ctx, loadingMsg, '❌');
@@ -95,9 +101,10 @@ async function handleVideo(ctx, result, validation, userId, loadingMsg, messages
 
     await editMessage(ctx, loadingMsg, messages.SENDING_VIDEO);
     const startTime = Date.now();
+    const isAdmin = String(userId) === String(config.ADMIN_ID);
     await ctx.replyWithVideo(
         Input.fromLocalFile(finalPath),
-        { caption: messages.VIDEO_DOWNLOADED }
+        { caption: isAdmin ? undefined : messages.VIDEO_DOWNLOADED }
     );
 
     const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -203,9 +210,10 @@ async function handleSingleImage(ctx, result, validation, userId, loadingMsg, me
     }
 
     await editMessage(ctx, loadingMsg, messages.sendingImage());
+    const isAdmin = String(userId) === String(config.ADMIN_ID);
     await ctx.replyWithPhoto(
         Input.fromLocalFile(imagePath),
-        { caption: messages.IMAGE_DOWNLOADED }
+        { caption: isAdmin ? undefined : messages.IMAGE_DOWNLOADED }
     );
 }
 
