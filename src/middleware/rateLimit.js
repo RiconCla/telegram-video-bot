@@ -8,6 +8,7 @@ const userLastRequest = new Map();
 // Команды и callback-ы, не подпадающие под rate limit
 const BYPASS_COMMANDS = new Set(['/start', '/lang']);
 const BYPASS_CALLBACKS = new Set([
+    'lang_en_start', 'lang_ru_start',
     'lang_en', 'lang_ru',
     'lang_change_menu', 'lang_no_ask',
     'check_subscription'

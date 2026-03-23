@@ -1,12 +1,12 @@
 const { Markup } = require('telegraf');
 const { log } = require('../utils/logger');
 const { checkSubscription } = require('../middleware/subscription');
-const { getLocale, setLanguage, hasLanguage, setUserActive } = require('../utils/i18n');
+const { getLocale, setLanguage, isUserActive, setUserActive } = require('../utils/i18n');
 const en = require('../locales/en');
 const config = require('../../config/config');
 
 // ─────────────────────────────────────────────
-// /start — экран выбора языка или приветствие
+// /start — всегда показывает выбор языка
 // ─────────────────────────────────────────────
 async function handleStart(ctx) {
     const userId = ctx.from.id;
@@ -14,36 +14,26 @@ async function handleStart(ctx) {
 
     log('info', `User started bot: @${username}`, userId);
 
-    if (hasLanguage(userId)) {
-        // Возвращающийся пользователь — пропускаем выбор языка
-        setUserActive(userId);
-        const messages = getLocale(userId);
-        await ctx.reply(messages.WELCOME_BACK, Markup.removeKeyboard());
-        return;
-    }
-
-    // Новый пользователь — показываем выбор языка (всегда на английском)
+    // Всегда показываем выбор языка (нейтральный английский текст)
+    // Кнопки /start используют lang_en_start/lang_ru_start — отдельные от /lang
     await ctx.reply(
         en.LANGUAGE_SELECT,
         Markup.inlineKeyboard([
             [
-                Markup.button.callback('🇬🇧 English', 'lang_en'),
-                Markup.button.callback('🇷🇺 Русский', 'lang_ru')
+                Markup.button.callback('🇬🇧 English', 'lang_en_start'),
+                Markup.button.callback('🇷🇺 Русский', 'lang_ru_start')
             ]
         ])
     );
 }
 
 // ─────────────────────────────────────────────
-// Callback: выбор языка (из /start или /lang)
+// Callback: выбор языка из /start
+// Активирует бота сразу — без кнопки «Запуск»
 // ─────────────────────────────────────────────
-async function handleLanguageSelect(ctx) {
+async function handleLanguageSelectStart(ctx) {
     const userId = ctx.from.id;
-    const lang = ctx.callbackQuery.data === 'lang_en' ? 'en' : 'ru';
-
-    // Определяем контекст ДО сохранения языка:
-    // если языка ещё нет — пришли из /start (первый раз)
-    const isFirstTime = !hasLanguage(userId);
+    const lang = ctx.callbackQuery.data === 'lang_en_start' ? 'en' : 'ru';
 
     await ctx.answerCbQuery();
     setLanguage(userId, lang);
@@ -51,29 +41,60 @@ async function handleLanguageSelect(ctx) {
     const messages = getLocale(userId);
     log('info', `User selected language: ${lang}`, userId);
 
-    if (isFirstTime) {
-        // Первый выбор языка — показываем приветствие + кнопку запуска
+    if (isUserActive(userId)) {
+        // Возвращающийся пользователь — сразу в работу
         await ctx.editMessageText(messages.LANGUAGE_SELECTED);
-        await ctx.reply(
-            messages.WELCOME_NEW,
-            Markup.keyboard([
-                [messages.LAUNCH_BUTTON]
-            ]).resize()
-        );
-    } else {
-        // Смена языка в процессе работы
-        await ctx.editMessageText(messages.LANG_CHANGED);
+        await ctx.reply(messages.WELCOME_BACK, Markup.removeKeyboard());
+        return;
     }
+
+    // Новый пользователь — проверка подписки (без промежуточной кнопки «Запуск»)
+    await ctx.editMessageText(messages.LANGUAGE_SELECTED);
+
+    const isSubscribed = await checkSubscription(ctx);
+    if (!isSubscribed) {
+        log('warning', 'User not subscribed to required channel', userId);
+        await ctx.reply(
+            messages.SUBSCRIPTION_REQUIRED,
+            Markup.inlineKeyboard([
+                [Markup.button.url('📢 Subscribe', `https://t.me/${config.REQUIRED_CHANNEL.replace('@', '')}`)],
+                [Markup.button.callback('✅ I subscribed', 'check_subscription')]
+            ])
+        );
+        return;
+    }
+
+    setUserActive(userId);
+    log('info', 'User activated bot', userId);
+    await ctx.reply(messages.BOT_ACTIVATED, Markup.removeKeyboard());
 }
 
 // ─────────────────────────────────────────────
-// Кнопка "Запуск бота" / "Launch bot"
+// Callback: выбор языка из /lang или кнопки «Сменить язык»
+// Только меняет язык — без welcome-сообщений
+// ─────────────────────────────────────────────
+async function handleLanguageSelect(ctx) {
+    const userId = ctx.from.id;
+    const lang = ctx.callbackQuery.data === 'lang_en' ? 'en' : 'ru';
+
+    await ctx.answerCbQuery();
+    setLanguage(userId, lang);
+
+    const messages = getLocale(userId);
+    log('info', `User changed language to: ${lang}`, userId);
+
+    await ctx.editMessageText(messages.LANG_CHANGED);
+}
+
+// ─────────────────────────────────────────────
+// Кнопка «Запуск бота» — запасной обработчик
+// (на случай если у кого-то осталась старая клавиатура)
 // ─────────────────────────────────────────────
 async function handleLaunchButton(ctx) {
     const userId = ctx.from.id;
     const messages = getLocale(userId);
 
-    log('info', 'User clicked launch button', userId);
+    log('info', 'User clicked launch button (legacy)', userId);
 
     const isSubscribed = await checkSubscription(ctx);
 
@@ -90,12 +111,9 @@ async function handleLaunchButton(ctx) {
     }
 
     setUserActive(userId);
-    log('info', 'User activated bot', userId);
+    log('info', 'User activated bot via legacy button', userId);
 
-    await ctx.reply(
-        messages.BOT_ACTIVATED,
-        Markup.removeKeyboard()
-    );
+    await ctx.reply(messages.BOT_ACTIVATED, Markup.removeKeyboard());
 }
 
 // ─────────────────────────────────────────────
@@ -119,14 +137,12 @@ async function handleCheckSubscription(ctx) {
     setUserActive(userId);
     log('success', 'Subscription verified successfully', userId);
 
-    await ctx.reply(
-        messages.BOT_ACTIVATED,
-        Markup.removeKeyboard()
-    );
+    await ctx.reply(messages.BOT_ACTIVATED, Markup.removeKeyboard());
 }
 
 module.exports = {
     handleStart,
+    handleLanguageSelectStart,
     handleLanguageSelect,
     handleLaunchButton,
     handleCheckSubscription

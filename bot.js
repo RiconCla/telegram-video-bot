@@ -5,6 +5,7 @@ const { clearAllUserFiles } = require('./src/utils/fileManager');
 const { rateLimitMiddleware } = require('./src/middleware/rateLimit');
 const {
     handleStart,
+    handleLanguageSelectStart,
     handleLanguageSelect,
     handleLaunchButton,
     handleCheckSubscription
@@ -44,7 +45,11 @@ bot.use(rateLimitMiddleware);
 
 bot.start(handleStart);
 
-// Выбор языка (inline кнопки)
+// Выбор языка из /start (активирует бота сразу)
+bot.action('lang_en_start', handleLanguageSelectStart);
+bot.action('lang_ru_start', handleLanguageSelectStart);
+
+// Выбор языка из /lang или кнопки «Сменить язык» (только меняет язык)
 bot.action('lang_en', handleLanguageSelect);
 bot.action('lang_ru', handleLanguageSelect);
 
