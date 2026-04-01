@@ -4,6 +4,7 @@ const { log } = require('../utils/logger');
 const { getStats, resetStats } = require('../utils/analytics');
 const { runHealthcheck } = require('./tiktokHealthcheck');
 const { getPendingUsers, removePending, markPending } = require('../utils/pendingSubscriptions');
+const subscriptionCache = require('../utils/subscriptionCache');
 const { Markup } = require('telegraf');
 
 let bot = null;
@@ -13,18 +14,26 @@ function escapeMarkdown(text) {
 }
 
 // Проверка подписки пользователя по userId (без ctx)
-async function checkUserSubscription(userId) {
-    if (!config.CHECK_SUBSCRIPTION || !bot) return null;
+async function checkUserSubscription(userId, telegram) {
+    const tg = telegram || (bot && bot.telegram);
+    if (!config.CHECK_SUBSCRIPTION || !tg) return null;
+
+    const cached = subscriptionCache.get(userId);
+    if (cached !== undefined) return cached;
+
     try {
-        const member = await bot.telegram.getChatMember(config.REQUIRED_CHANNEL, userId);
-        return ['creator', 'administrator', 'member'].includes(member.status);
-    } catch {
+        const member = await tg.getChatMember(config.REQUIRED_CHANNEL, userId);
+        const result = ['creator', 'administrator', 'member'].includes(member.status);
+        subscriptionCache.set(userId, result);
+        return result;
+    } catch (error) {
+        log('error', `Subscription check error for user ${userId}: ${error.message}`);
         return false;
     }
 }
 
 // Форматирование отчёта
-async function formatReport(stats) {
+async function formatReport(stats, telegram) {
     const { period, activeUsers, totalUsers, userList } = stats;
 
     let periodName;
@@ -46,7 +55,7 @@ async function formatReport(stats) {
         const checks = await Promise.all(
             userList.map(async (user) => ({
                 userId: user.userId,
-                subscribed: await checkUserSubscription(user.userId)
+                subscribed: await checkUserSubscription(user.userId, telegram)
             }))
         );
         checks.forEach(({ userId, subscribed }) => subscriptionStatuses.set(userId, subscribed));
@@ -143,7 +152,7 @@ async function sendReport(period) {
 
     try {
         const stats = getStats(period);
-        const message = await formatReport(stats);
+        const message = await formatReport(stats, bot.telegram);
 
         await bot.telegram.sendMessage(config.ADMIN_ID, message, { parse_mode: 'Markdown' });
         log('success', `Report sent to admin (${config.ADMIN_ID}) for period: ${period}`);
@@ -246,7 +255,7 @@ async function sendManualReport(ctx, period = 'daily') {
 
     try {
         const stats = getStats(period);
-        const message = await formatReport(stats);
+        const message = await formatReport(stats, ctx.telegram);
         await ctx.reply(message, { parse_mode: 'Markdown' });
     } catch (error) {
         log('error', `Failed to send manual report: ${error.message}`);

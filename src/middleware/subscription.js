@@ -1,5 +1,6 @@
 const config = require('../../config/config');
 const { log } = require('../utils/logger');
+const subscriptionCache = require('../utils/subscriptionCache');
 
 async function checkSubscription(ctx) {
     if (!config.CHECK_SUBSCRIPTION) {
@@ -14,6 +15,7 @@ async function checkSubscription(ctx) {
         );
 
         const isSubscribed = ['creator', 'administrator', 'member'].includes(member.status);
+        subscriptionCache.set(ctx.from.id, isSubscribed);
         log('info', `Subscription check: ${isSubscribed ? 'PASSED' : 'FAILED'}`, ctx.from.id);
         return isSubscribed;
     } catch (error) {
