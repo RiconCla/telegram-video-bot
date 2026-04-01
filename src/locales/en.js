@@ -21,9 +21,13 @@ module.exports = {
 
     BOT_ACTIVATED: '✅ Great! Now send me a link to a video or image from TikTok or Instagram.',
 
-    SUBSCRIPTION_REQUIRED: '❌ To use this bot, you need to subscribe to the channel!',
+    SUBSCRIPTION_REQUIRED: 'To use this bot, please subscribe to this channel! It\'s the minimum I ask of you :)',
 
-    SUBSCRIPTION_FAILED: '❌ You are still not subscribed to the channel. Please subscribe and try again.',
+    SUBSCRIPTION_FAILED: 'You are still not subscribed to the channel. Please subscribe and try again :)',
+
+    SUBSCRIBE_BUTTON: '📢 Subscribe',
+
+    CHECK_SUBSCRIPTION_BUTTON: '✅ I subscribed',
 
     NOT_ACTIVATED: 'Press the "🚀 Launch bot" button to get started.',
 
@@ -78,5 +82,7 @@ module.exports = {
         return `✅ Downloaded ${total} images`;
     },
 
-    batchPart: (part, total) => `📸 Part ${part}/${total}`
+    batchPart: (part, total) => `📸 Part ${part}/${total}`,
+
+    SUBSCRIPTION_REMINDER: 'Hi! Just a reminder — please subscribe to the channel to use the bot :)'
 };

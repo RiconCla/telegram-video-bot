@@ -30,5 +30,8 @@ module.exports = {
     ADMIN_ID: process.env.ADMIN_ID || null,
     REPORT_FREQUENCY: process.env.REPORT_FREQUENCY || 'daily',
     REPORT_TIME: process.env.REPORT_TIME || '20:00',
-    REPORT_TIMEZONE: process.env.REPORT_TIMEZONE || 'Europe/Moscow'
+    REPORT_TIMEZONE: process.env.REPORT_TIMEZONE || 'Europe/Moscow',
+
+    // Напоминание о подписке (в днях)
+    SUBSCRIPTION_REMINDER_DAYS: parseInt(process.env.SUBSCRIPTION_REMINDER_DAYS) || 5
 };

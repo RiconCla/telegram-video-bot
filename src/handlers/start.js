@@ -1,7 +1,8 @@
 const { Markup } = require('telegraf');
 const { log } = require('../utils/logger');
 const { checkSubscription } = require('../middleware/subscription');
-const { getLocale, setLanguage, isUserActive, setUserActive } = require('../utils/i18n');
+const { getLocale, setLanguage, getUserLanguage, isUserActive, setUserActive } = require('../utils/i18n');
+const { markPending, removePending } = require('../utils/pendingSubscriptions');
 const en = require('../locales/en');
 const config = require('../../config/config');
 
@@ -54,16 +55,18 @@ async function handleLanguageSelectStart(ctx) {
     const isSubscribed = await checkSubscription(ctx);
     if (!isSubscribed) {
         log('warning', 'User not subscribed to required channel', userId);
+        markPending(userId, lang);
         await ctx.reply(
             messages.SUBSCRIPTION_REQUIRED,
             Markup.inlineKeyboard([
-                [Markup.button.url('📢 Subscribe', `https://t.me/${config.REQUIRED_CHANNEL.replace('@', '')}`)],
-                [Markup.button.callback('✅ I subscribed', 'check_subscription')]
+                [Markup.button.url(messages.SUBSCRIBE_BUTTON, `https://t.me/${config.REQUIRED_CHANNEL.replace('@', '')}`)],
+                [Markup.button.callback(messages.CHECK_SUBSCRIPTION_BUTTON, 'check_subscription')]
             ])
         );
         return;
     }
 
+    removePending(userId);
     setUserActive(userId);
     log('info', 'User activated bot', userId);
     await ctx.reply(messages.BOT_ACTIVATED, Markup.removeKeyboard());
@@ -97,6 +100,8 @@ async function handleLanguageSelect(ctx) {
             log('warning', `editMessageText failed during lang switch: ${e.message}`, userId);
         }
     }
+
+    await ctx.reply(messages.SEND_NEW_LINK);
 }
 
 // ─────────────────────────────────────────────
@@ -113,16 +118,18 @@ async function handleLaunchButton(ctx) {
 
     if (!isSubscribed) {
         log('warning', 'User not subscribed to required channel', userId);
+        markPending(userId, getUserLanguage(userId));
         await ctx.reply(
             messages.SUBSCRIPTION_REQUIRED,
             Markup.inlineKeyboard([
-                [Markup.button.url('📢 Subscribe', `https://t.me/${config.REQUIRED_CHANNEL.replace('@', '')}`)],
-                [Markup.button.callback('✅ I subscribed', 'check_subscription')]
+                [Markup.button.url(messages.SUBSCRIBE_BUTTON, `https://t.me/${config.REQUIRED_CHANNEL.replace('@', '')}`)],
+                [Markup.button.callback(messages.CHECK_SUBSCRIPTION_BUTTON, 'check_subscription')]
             ])
         );
         return;
     }
 
+    removePending(userId);
     setUserActive(userId);
     log('info', 'User activated bot via legacy button', userId);
 
@@ -143,10 +150,12 @@ async function handleCheckSubscription(ctx) {
 
     if (!isSubscribed) {
         log('warning', 'Subscription verification failed', userId);
+        markPending(userId, getUserLanguage(userId));
         await ctx.reply(messages.SUBSCRIPTION_FAILED);
         return;
     }
 
+    removePending(userId);
     setUserActive(userId);
     log('success', 'Subscription verified successfully', userId);
 

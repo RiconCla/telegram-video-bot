@@ -7,6 +7,30 @@ if (!fs.existsSync(config.LOGS_DIR)) {
     fs.mkdirSync(config.LOGS_DIR, { recursive: true });
 }
 
+// Удаление логов старше 7 дней
+function cleanOldLogs() {
+    try {
+        const files = fs.readdirSync(config.LOGS_DIR);
+        const now = Date.now();
+        const maxAge = 7 * 24 * 60 * 60 * 1000;
+
+        for (const file of files) {
+            if (!file.startsWith('bot-') || !file.endsWith('.log')) continue;
+            const filePath = path.join(config.LOGS_DIR, file);
+            const stat = fs.statSync(filePath);
+            if (now - stat.mtimeMs > maxAge) {
+                fs.unlinkSync(filePath);
+            }
+        }
+    } catch (e) {
+        // Не прерываем работу бота из-за ошибки очистки
+    }
+}
+
+// Очистка при старте и раз в сутки
+cleanOldLogs();
+setInterval(cleanOldLogs, 24 * 60 * 60 * 1000);
+
 function log(level, message, userId = null) {
     const timestamp = new Date().toISOString();
     const userInfo = userId ? `[User: ${userId}]` : '';

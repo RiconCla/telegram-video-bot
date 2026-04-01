@@ -6,10 +6,12 @@ const { downloadTiktok } = require('../services/tiktok');
 const { downloadInstagram } = require('../services/instagram');
 const { downloadMediaFile } = require('../services/downloader');
 const { getLocale, hasNoAskLang } = require('../utils/i18n');
+const { checkSubscription } = require('../middleware/subscription');
 const config = require('../../config/config');
 const fs = require('fs');
 const { trackUser } = require('../utils/analytics');
 const { compressVideo } = require('../utils/compressor');
+const { markPending } = require('../utils/pendingSubscriptions');
 
 async function handleUrl(ctx, isActive) {
     const userId = ctx.from.id;
@@ -27,6 +29,21 @@ async function handleUrl(ctx, isActive) {
             Markup.keyboard([
                 [messages.LAUNCH_BUTTON]
             ]).resize()
+        );
+        return;
+    }
+
+    // Проверка подписки на канал при каждом запросе
+    const isSubscribed = await checkSubscription(ctx);
+    if (!isSubscribed) {
+        log('warning', 'User not subscribed to required channel', userId);
+        markPending(userId, require('../utils/i18n').getUserLanguage(userId));
+        await ctx.reply(
+            messages.SUBSCRIPTION_REQUIRED,
+            Markup.inlineKeyboard([
+                [Markup.button.url(messages.SUBSCRIBE_BUTTON, `https://t.me/${config.REQUIRED_CHANNEL.replace('@', '')}`)],
+                [Markup.button.callback(messages.CHECK_SUBSCRIPTION_BUTTON, 'check_subscription')]
+            ])
         );
         return;
     }

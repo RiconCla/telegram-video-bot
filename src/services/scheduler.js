@@ -3,15 +3,28 @@ const config = require('../../config/config');
 const { log } = require('../utils/logger');
 const { getStats, resetStats } = require('../utils/analytics');
 const { runHealthcheck } = require('./tiktokHealthcheck');
+const { getPendingUsers, removePending, markPending } = require('../utils/pendingSubscriptions');
+const { Markup } = require('telegraf');
 
 let bot = null;
 
 function escapeMarkdown(text) {
-    return String(text).replace(/[_*`\[]/g, '\\$&');
+    return String(text).replace(/[_*`\[\]()~>#+\-=|{}.!\\]/g, '\\$&');
+}
+
+// Проверка подписки пользователя по userId (без ctx)
+async function checkUserSubscription(userId) {
+    if (!config.CHECK_SUBSCRIPTION || !bot) return null;
+    try {
+        const member = await bot.telegram.getChatMember(config.REQUIRED_CHANNEL, userId);
+        return ['creator', 'administrator', 'member'].includes(member.status);
+    } catch {
+        return false;
+    }
 }
 
 // Форматирование отчёта
-function formatReport(stats) {
+async function formatReport(stats) {
     const { period, activeUsers, totalUsers, userList } = stats;
 
     let periodName;
@@ -27,6 +40,18 @@ function formatReport(stats) {
             break;
     }
 
+    // Проверяем подписку всех пользователей параллельно
+    const subscriptionStatuses = new Map();
+    if (config.CHECK_SUBSCRIPTION && userList.length > 0) {
+        const checks = await Promise.all(
+            userList.map(async (user) => ({
+                userId: user.userId,
+                subscribed: await checkUserSubscription(user.userId)
+            }))
+        );
+        checks.forEach(({ userId, subscribed }) => subscriptionStatuses.set(userId, subscribed));
+    }
+
     let message = `📊 *Статистика бота ${periodName}*\n\n`;
     message += `👥 Активных пользователей: *${activeUsers}*\n`;
     message += `🔢 Всего пользователей: *${totalUsers}*\n\n`;
@@ -39,13 +64,19 @@ function formatReport(stats) {
                 const displayName = (user.username && user.username !== 'Unknown')
                     ? `@${user.username}`
                     : `User ${user.userId}`;
-                userLink = `[${displayName}](tg://user?id=${user.userId})`;
+                userLink = `[${escapeMarkdown(displayName)}](tg://user?id=${user.userId})`;
             } else if (user.username && user.username !== 'Unknown') {
                 userLink = `@${escapeMarkdown(user.username)}`;
             } else {
                 userLink = `User ${index + 1}`;
             }
-            message += `${index + 1}. ${userLink} — ${user.requests} запросов\n`;
+
+            let subLabel = '';
+            if (subscriptionStatuses.has(user.userId)) {
+                subLabel = subscriptionStatuses.get(user.userId) ? ' ✅' : ' ❌';
+            }
+
+            message += `${index + 1}. ${userLink} — ${user.requests} запросов${subLabel}\n`;
         });
     } else {
         message += `ℹ️ За этот период активности не было.`;
@@ -54,6 +85,53 @@ function formatReport(stats) {
     message += `\n🕐 Отчёт сформирован: ${new Date().toLocaleString('ru-RU', { timeZone: config.REPORT_TIMEZONE })}`;
 
     return message;
+}
+
+// Отправка напоминаний о подписке
+async function sendSubscriptionReminders() {
+    if (!bot || !config.CHECK_SUBSCRIPTION) return;
+
+    const pendingUsers = getPendingUsers();
+    const now = new Date();
+    const intervalMs = config.SUBSCRIPTION_REMINDER_DAYS * 24 * 60 * 60 * 1000;
+    let sent = 0;
+
+    for (const { userId, lastReminder, lang } of pendingUsers) {
+        if (now - lastReminder < intervalMs) continue;
+
+        // Проверяем, может пользователь уже подписался
+        const subscribed = await checkUserSubscription(userId);
+        if (subscribed) {
+            removePending(userId);
+            log('info', `User subscribed since last check, removed from pending`, userId);
+            continue;
+        }
+
+        const locale = lang === 'ru' ? require('../locales/ru') : require('../locales/en');
+        try {
+            await bot.telegram.sendMessage(userId, locale.SUBSCRIPTION_REMINDER, {
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: locale.SUBSCRIBE_BUTTON, url: `https://t.me/${config.REQUIRED_CHANNEL.replace('@', '')}` }],
+                        [{ text: locale.CHECK_SUBSCRIPTION_BUTTON, callback_data: 'check_subscription' }]
+                    ]
+                }
+            });
+            markPending(userId, lang); // обновляем lastReminder
+            sent++;
+            log('info', `Subscription reminder sent`, userId);
+        } catch (e) {
+            if (e.response?.error_code === 403) {
+                // Пользователь заблокировал бота
+                removePending(userId);
+                log('info', `User blocked bot, removed from pending`, userId);
+            } else {
+                log('error', `Failed to send reminder: ${e.message}`, userId);
+            }
+        }
+    }
+
+    log('info', `Subscription reminders: ${sent} sent, ${pendingUsers.length} total pending`);
 }
 
 // Отправка отчёта администратору
@@ -65,7 +143,7 @@ async function sendReport(period) {
 
     try {
         const stats = getStats(period);
-        const message = formatReport(stats);
+        const message = await formatReport(stats);
 
         await bot.telegram.sendMessage(config.ADMIN_ID, message, { parse_mode: 'Markdown' });
         log('success', `Report sent to admin (${config.ADMIN_ID}) for period: ${period}`);
@@ -137,6 +215,18 @@ function initScheduler(botInstance) {
 
     log('success', 'TikTok healthcheck scheduler initialized (every 4 hours)');
 
+    // Напоминание о подписке — каждый день в 12:00
+    if (config.CHECK_SUBSCRIPTION && config.SUBSCRIPTION_REMINDER_DAYS > 0) {
+        cron.schedule('0 12 * * *', () => {
+            log('info', 'Running subscription reminder check...');
+            sendSubscriptionReminders();
+        }, {
+            scheduled: true,
+            timezone: config.REPORT_TIMEZONE
+        });
+        log('success', `Subscription reminder scheduler initialized (every ${config.SUBSCRIPTION_REMINDER_DAYS} days)`);
+    }
+
     // Запускаем первую проверку через 1 минуту после старта
     setTimeout(() => {
         log('info', 'Running initial TikTok API healthcheck...');
@@ -156,7 +246,7 @@ async function sendManualReport(ctx, period = 'daily') {
 
     try {
         const stats = getStats(period);
-        const message = formatReport(stats);
+        const message = await formatReport(stats);
         await ctx.reply(message, { parse_mode: 'Markdown' });
     } catch (error) {
         log('error', `Failed to send manual report: ${error.message}`);
