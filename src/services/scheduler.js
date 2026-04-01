@@ -9,7 +9,7 @@ const { Markup } = require('telegraf');
 let bot = null;
 
 function escapeMarkdown(text) {
-    return String(text).replace(/[_*`\[\]()~>#+\-=|{}.!\\]/g, '\\$&');
+    return String(text).replace(/[_*`\[]/g, '\\$&');
 }
 
 // Проверка подписки пользователя по userId (без ctx)
@@ -64,7 +64,7 @@ async function formatReport(stats) {
                 const displayName = (user.username && user.username !== 'Unknown')
                     ? `@${user.username}`
                     : `User ${user.userId}`;
-                userLink = `[${escapeMarkdown(displayName)}](tg://user?id=${user.userId})`;
+                userLink = `[${displayName}](tg://user?id=${user.userId})`;
             } else if (user.username && user.username !== 'Unknown') {
                 userLink = `@${escapeMarkdown(user.username)}`;
             } else {
