@@ -10,7 +10,7 @@ const { checkSubscription } = require('../middleware/subscription');
 const config = require('../../config/config');
 const fs = require('fs');
 const { trackUser } = require('../utils/analytics');
-const { compressVideo } = require('../utils/compressor');
+const { compressVideo, ensureCompatible } = require('../utils/compressor');
 const { markPending } = require('../utils/pendingSubscriptions');
 
 async function handleUrl(ctx, isActive) {
@@ -104,9 +104,11 @@ async function handleVideo(ctx, result, validation, userId, loadingMsg, messages
 
     let finalPath;
     if (validation.isInstagram) {
-        finalPath = await compressVideo(result.url, userId);
-        if (finalPath !== result.url && fs.existsSync(result.url)) {
-            fs.unlinkSync(result.url);
+        // Нормализуем кодек для совместимости с Apple (iOS/macOS)
+        const compatPath = await ensureCompatible(result.url, userId);
+        finalPath = await compressVideo(compatPath, userId);
+        if (finalPath !== compatPath && fs.existsSync(compatPath)) {
+            fs.unlinkSync(compatPath);
         }
     } else {
         const videoPath = await downloadMediaFile(result.url, userId, 'video.mp4');

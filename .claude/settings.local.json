@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(js|py|json|txt|yml|yaml|env\\)$\")",
+      "WebSearch",
+      "Bash(node:*)",
+      "Bash(where yt-dlp:*)"
+    ]
+  }
+}

@@ -27,7 +27,12 @@ async function downloadInstagram(url, userId) {
     const outputTemplate = path.join(userDir, '%(id)s.%(ext)s');
 
     // Формируем аргументы yt-dlp (с прокси если настроен)
-    const ytDlpArgs = ['--output', outputTemplate, '--no-warnings'];
+    const ytDlpArgs = [
+        '--output', outputTemplate,
+        '--no-warnings',
+        // Предпочитаем H.264+AAC для совместимости с Apple устройствами
+        '--format', 'bv*[vcodec^=avc]+ba[acodec^=mp4a]/b[vcodec^=avc]/b'
+    ];
     if (config.PROXY_HOST && config.PROXY_PORT) {
         ytDlpArgs.push('--proxy', `socks5://${config.PROXY_HOST}:${config.PROXY_PORT}`);
         log('info', `yt-dlp will use proxy: ${config.PROXY_HOST}:${config.PROXY_PORT}`, userId);
