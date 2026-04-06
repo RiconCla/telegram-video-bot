@@ -4,7 +4,22 @@
       "Bash(grep -E \"\\\\.\\(js|py|json|txt|yml|yaml|env\\)$\")",
       "WebSearch",
       "Bash(node:*)",
-      "Bash(where yt-dlp:*)"
+      "Bash(where yt-dlp:*)",
+      "Bash(yt-dlp --version)",
+      "Bash(pip show:*)",
+      "Bash(pip3 show:*)",
+      "Bash(python -m pip show yt-dlp)",
+      "Bash(python3 -m pip show yt-dlp)",
+      "Bash(curl:*)",
+      "Bash(where ffmpeg:*)",
+      "Bash(where ffprobe:*)",
+      "Bash(powershell -Command \"Expand-Archive -Path ffmpeg.zip -DestinationPath ffmpeg_tmp -Force\")",
+      "Bash(cp \"C:/Users/Artem/Desktop/bot/telegram-video-bot/ffmpeg_tmp/ffmpeg-8.1-essentials_build/bin/ffmpeg.exe\" \"C:/Users/Artem/Desktop/bot/telegram-video-bot/ffmpeg.exe\")",
+      "Bash(cp \"C:/Users/Artem/Desktop/bot/telegram-video-bot/ffmpeg_tmp/ffmpeg-8.1-essentials_build/bin/ffprobe.exe\" \"C:/Users/Artem/Desktop/bot/telegram-video-bot/ffprobe.exe\")",
+      "Bash(./ffmpeg.exe -version)",
+      "Bash(./ffprobe.exe -version)",
+      "Bash(\"C:/Users/Artem/Desktop/bot/telegram-video-bot/ffmpeg.exe\" -version)",
+      "Bash(\"C:/Users/Artem/Desktop/bot/telegram-video-bot/ffprobe.exe\" -version)"
     ]
   }
 }

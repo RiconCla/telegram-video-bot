@@ -25,6 +25,12 @@ data/
 .yarn/cache/
 .eslintcache
 
+# Claude Code
+.claude/
+
+# Скриншоты
+pics/
+
 # IDE и редакторы
 .vscode/
 .idea/
@@ -35,6 +41,9 @@ data/
 # Операционная система
 .DS_Store
 Thumbs.db
+
+# Windows бинарники
+*.exe
 
 # PM2
 .pm2/
