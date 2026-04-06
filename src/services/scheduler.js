@@ -28,7 +28,7 @@ async function checkUserSubscription(userId, telegram) {
         return result;
     } catch (error) {
         log('error', `Subscription check error for user ${userId}: ${error.message}`);
-        return false;
+        return null;
     }
 }
 
@@ -49,16 +49,14 @@ async function formatReport(stats, telegram) {
             break;
     }
 
-    // Проверяем подписку всех пользователей параллельно
+    // Проверяем подписку пользователей последовательно (избегаем rate limit)
     const subscriptionStatuses = new Map();
     if (config.CHECK_SUBSCRIPTION && userList.length > 0) {
-        const checks = await Promise.all(
-            userList.map(async (user) => ({
-                userId: user.userId,
-                subscribed: await checkUserSubscription(user.userId, telegram)
-            }))
-        );
-        checks.forEach(({ userId, subscribed }) => subscriptionStatuses.set(userId, subscribed));
+        for (const user of userList) {
+            const subscribed = await checkUserSubscription(user.userId, telegram);
+            subscriptionStatuses.set(user.userId, subscribed);
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
     }
 
     let message = `📊 *Статистика бота ${periodName}*\n\n`;
@@ -82,7 +80,8 @@ async function formatReport(stats, telegram) {
 
             let subLabel = '';
             if (subscriptionStatuses.has(user.userId)) {
-                subLabel = subscriptionStatuses.get(user.userId) ? ' ✅' : ' ❌';
+                const status = subscriptionStatuses.get(user.userId);
+                subLabel = status === true ? ' ✅' : status === false ? ' ❌' : ' ❓';
             }
 
             message += `${index + 1}. ${userLink} — ${user.requests} запросов${subLabel}\n`;
