@@ -1,5 +1,5 @@
-// require('dotenv').config({ path: './credit.env' });
-require('dotenv').config();;
+require('dotenv').config();
+const path = require('path');
 
 module.exports = {
     // Telegram
