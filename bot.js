@@ -124,7 +124,11 @@ bot.catch(handleBotError);
 // ЗАПУСК БОТА
 // ============================================
 
-bot.launch()
+// Сбрасываем старые polling-соединения перед стартом
+bot.telegram.deleteWebhook({ drop_pending_updates: true })
+    .then(() => log('info', 'Webhook cleared, starting polling...'))
+    .catch(() => {})
+    .then(() => bot.launch())
     .then(() => {
         log('success', `Bot started successfully! Subscription check: ${config.CHECK_SUBSCRIPTION ? 'ENABLED' : 'DISABLED'}`);
         initScheduler(bot);
