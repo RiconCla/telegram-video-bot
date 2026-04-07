@@ -10,7 +10,7 @@ const { checkSubscription } = require('../middleware/subscription');
 const config = require('../../config/config');
 const fs = require('fs');
 const { trackUser } = require('../utils/analytics');
-const { compressVideo, ensureCompatible } = require('../utils/compressor');
+const { compressVideo, ensureCompatible, getVideoMeta } = require('../utils/compressor');
 const { markPending } = require('../utils/pendingSubscriptions');
 
 async function handleUrl(ctx, isActive) {
@@ -121,10 +121,18 @@ async function handleVideo(ctx, result, validation, userId, loadingMsg, messages
     await editMessage(ctx, loadingMsg, messages.SENDING_VIDEO);
     const startTime = Date.now();
     const isAdmin = String(userId) === String(config.ADMIN_ID);
-    await ctx.replyWithVideo(
-        Input.fromLocalFile(finalPath),
-        { caption: isAdmin ? undefined : messages.VIDEO_DOWNLOADED }
-    );
+    const videoOpts = { caption: isAdmin ? undefined : messages.VIDEO_DOWNLOADED, supports_streaming: true };
+    try {
+        const meta = await getVideoMeta(finalPath);
+        if (meta) {
+            videoOpts.width = meta.width;
+            videoOpts.height = meta.height;
+            videoOpts.duration = meta.duration;
+        }
+    } catch (e) {
+        log('warning', `Could not get video metadata: ${e.message}`, userId);
+    }
+    await ctx.replyWithVideo(Input.fromLocalFile(finalPath), videoOpts);
 
     const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
     log('success', `Video sent successfully in ${uploadTime}s`, userId);

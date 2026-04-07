@@ -9,8 +9,12 @@ const execFileAsync = promisify(execFile);
 
 const VIDEO_EXTS = /\.(mp4|mkv|webm|mov|avi|m4v)$/i;
 
+// Используем локальный yt-dlp если есть, иначе глобальный
+const localYtDlp = path.join(__dirname, '..', '..', 'yt-dlp.exe');
+const YT_DLP = fs.existsSync(localYtDlp) ? localYtDlp : 'yt-dlp';
+
 async function runYtDlp(args, timeout = 120000) {
-    return execFileAsync('yt-dlp', args, { timeout });
+    return execFileAsync(YT_DLP, args, { timeout });
 }
 
 async function downloadInstagram(url, userId) {
@@ -22,12 +26,12 @@ async function downloadInstagram(url, userId) {
         fs.mkdirSync(userDir, { recursive: true });
     }
 
-    // Snapshot existing files before download to detect new ones
-    const beforeFiles = new Set(fs.readdirSync(userDir));
+    // Запоминаем время перед загрузкой для детекции новых/перезаписанных файлов
+    const beforeTime = Date.now();
     const outputTemplate = path.join(userDir, '%(id)s.%(ext)s');
 
     // Формируем аргументы yt-dlp (с прокси если настроен)
-    const ytDlpArgs = ['--output', outputTemplate, '--no-warnings'];
+    const ytDlpArgs = ['--output', outputTemplate, '--no-warnings', '--force-overwrites'];
     if (config.PROXY_HOST && config.PROXY_PORT) {
         ytDlpArgs.push('--proxy', `socks5://${config.PROXY_HOST}:${config.PROXY_PORT}`);
         log('info', `yt-dlp will use proxy: ${config.PROXY_HOST}:${config.PROXY_PORT}`, userId);
@@ -37,12 +41,21 @@ async function downloadInstagram(url, userId) {
     let downloadOk = false;
     try {
         log('info', 'Running yt-dlp (attempt 1)', userId);
-        await runYtDlp([...ytDlpArgs, url]);
+        const { stdout, stderr } = await runYtDlp([...ytDlpArgs, url]);
+        if (stdout) log('info', `yt-dlp stdout: ${stdout.trim()}`, userId);
+        if (stderr) log('warning', `yt-dlp stderr: ${stderr.trim()}`, userId);
         downloadOk = true;
     } catch (err1) {
+        const stderr = err1.stderr || '';
+        const stdout = err1.stdout || '';
         log('warning', `yt-dlp attempt 1 failed: ${err1.message}`, userId);
+        if (stderr) log('warning', `yt-dlp stderr: ${stderr.trim()}`, userId);
+        if (stdout) log('info', `yt-dlp stdout: ${stdout.trim()}`, userId);
         // Some yt-dlp versions exit non-zero on warnings even on success — check files anyway
-        const hasNew = fs.readdirSync(userDir).some(f => !beforeFiles.has(f));
+        const hasNew = fs.readdirSync(userDir).some(f => {
+            const stat = fs.statSync(path.join(userDir, f));
+            return stat.isFile() && stat.mtimeMs >= beforeTime;
+        });
         if (hasNew) {
             log('info', 'Files found despite non-zero exit, treating as success', userId);
             downloadOk = true;
@@ -54,11 +67,13 @@ async function downloadInstagram(url, userId) {
         return { success: false };
     }
 
-    // Collect newly downloaded files
+    // Collect newly downloaded/overwritten files
     const newFiles = fs.readdirSync(userDir)
-        .filter(f => !beforeFiles.has(f))
         .map(f => path.join(userDir, f))
-        .filter(f => fs.statSync(f).isFile());
+        .filter(f => {
+            const stat = fs.statSync(f);
+            return stat.isFile() && stat.mtimeMs >= beforeTime;
+        });
 
     if (newFiles.length === 0) {
         log('error', 'yt-dlp ran but no new files found in user dir', userId);
