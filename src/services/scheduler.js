@@ -242,9 +242,13 @@ function initScheduler(botInstance) {
     }, 60000);
 }
 
+// Хранение ID последних отчётов по chatId
+const lastReportMessages = new Map();
+
 // Отправка отчёта по команде (для тестирования)
 async function sendManualReport(ctx, period = 'daily') {
     const userId = ctx.from.id.toString();
+    const chatId = ctx.chat.id;
 
     // Проверяем, является ли пользователь администратором
     if (config.ADMIN_ID && userId !== config.ADMIN_ID.toString()) {
@@ -252,10 +256,20 @@ async function sendManualReport(ctx, period = 'daily') {
         return;
     }
 
+    // Удаляем команду пользователя
+    try { await ctx.deleteMessage(); } catch (e) {}
+
+    // Удаляем предыдущий отчёт
+    const prevMessageId = lastReportMessages.get(chatId);
+    if (prevMessageId) {
+        try { await ctx.telegram.deleteMessage(chatId, prevMessageId); } catch (e) {}
+    }
+
     try {
         const stats = getStats(period);
         const message = await formatReport(stats, ctx.telegram);
-        await ctx.reply(message, { parse_mode: 'Markdown' });
+        const sent = await ctx.reply(message, { parse_mode: 'Markdown' });
+        lastReportMessages.set(chatId, sent.message_id);
     } catch (error) {
         log('error', `Failed to send manual report: ${error.message}`);
         await ctx.reply('❌ Ошибка при формировании отчёта.');
