@@ -1,4 +1,4 @@
-require('dotenv').config({ path: './credit.env' });
+// require('dotenv').config({ path: './credit.env' });
 const path = require('path');
 
 module.exports = {
