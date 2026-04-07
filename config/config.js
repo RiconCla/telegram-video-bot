@@ -8,7 +8,7 @@ module.exports = {
     CHECK_SUBSCRIPTION: process.env.CHECK_SUBSCRIPTION === 'true',
 
     // Proxy (Shadowsocks/SOCKS5 для Telegram API)
-    PROXY_HOST: process.env.PROXY_PORT,
+    PROXY_HOST: process.env.PROXY_HOST,
     PROXY_PORT: process.env.PROXY_PORT,
 
     // Rate Limiting

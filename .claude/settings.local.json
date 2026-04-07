@@ -19,7 +19,8 @@
       "Bash(./ffmpeg.exe -version)",
       "Bash(./ffprobe.exe -version)",
       "Bash(\"C:/Users/Artem/Desktop/bot/telegram-video-bot/ffmpeg.exe\" -version)",
-      "Bash(\"C:/Users/Artem/Desktop/bot/telegram-video-bot/ffprobe.exe\" -version)"
+      "Bash(\"C:/Users/Artem/Desktop/bot/telegram-video-bot/ffprobe.exe\" -version)",
+      "WebFetch(domain:docs.dokploy.com)"
     ]
   }
 }

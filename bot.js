@@ -131,7 +131,7 @@ bot.launch()
         console.log('\n' + '='.repeat(50));
         console.log('🤖 BOT CONFIGURATION:');
         console.log('='.repeat(50));
-        console.log(`📝 Config file: credit.env`);
+        console.log(`📝 Config: environment variables`);
         console.log(`🔐 Token: ${config.BOT_TOKEN ? '✅ Loaded' : '❌ Missing'}`);
         console.log(`📢 Required channel: ${config.REQUIRED_CHANNEL || 'Not set'}`);
         console.log(`✓  Subscription check: ${config.CHECK_SUBSCRIPTION ? '🟢 ENABLED' : '🔴 DISABLED'}`);

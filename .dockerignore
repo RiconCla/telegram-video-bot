@@ -1,0 +1,15 @@
+node_modules
+logs
+temp
+data
+*.exe
+.git
+.gitignore
+.claude
+deploy.sh
+setup.sh
+README.md
+pics
+*.md
+credit.env
+.env
