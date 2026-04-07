@@ -132,7 +132,8 @@ bot.launch()
         console.log('🤖 BOT CONFIGURATION:');
         console.log('='.repeat(50));
         console.log(`📝 Config: environment variables`);
-        console.log(`🔐 Token: ${config.BOT_TOKEN ? '✅ Loaded' : '❌ Missing'}`);
+        console.log(`🔐 Token: ${config.BOT_TOKEN ? '✅ Loaded' : '❌ Missing'}`)
+        console.log(`👤 Admin ID: ${config.ADMIN_ID ? `"${config.ADMIN_ID}"` : '❌ Not set'}`);
         console.log(`📢 Required channel: ${config.REQUIRED_CHANNEL || 'Not set'}`);
         console.log(`✓  Subscription check: ${config.CHECK_SUBSCRIPTION ? '🟢 ENABLED' : '🔴 DISABLED'}`);
         console.log(`⏱  Rate limit: ${config.RATE_LIMIT / 1000} seconds`);

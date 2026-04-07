@@ -27,7 +27,7 @@ module.exports = {
     TIKTOK_API_URL: 'https://tikwm.com/api/',
 
     // Статистика и отчёты
-    ADMIN_ID: process.env.ADMIN_ID || null,
+    ADMIN_ID: (process.env.ADMIN_ID || '').trim() || null,
     REPORT_FREQUENCY: process.env.REPORT_FREQUENCY || 'daily',
     REPORT_TIME: process.env.REPORT_TIME || '20:00',
     REPORT_TIMEZONE: process.env.REPORT_TIMEZONE || 'Europe/Moscow',
