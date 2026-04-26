@@ -14,7 +14,7 @@ const { handleLangCommand, handleLangChangeMenu, handleNoAskLang } = require('./
 const { handleUrl } = require('./src/handlers/url');
 const { isUserActive } = require('./src/utils/i18n');
 const { handleBotError } = require('./src/handlers/error');
-const { initScheduler, sendManualReport } = require('./src/services/scheduler');
+const { initScheduler, sendManualReport, sendUsersList } = require('./src/services/scheduler');
 const { trackUser } = require('./src/utils/analytics');
 const { runHealthcheck } = require('./src/services/tiktokHealthcheck');
 const { SocksProxyAgent } = require('socks-proxy-agent');
@@ -72,6 +72,10 @@ bot.command('stats', async (ctx) => {
     await sendManualReport(ctx, 'daily');
 });
 
+bot.command('users', async (ctx) => {
+    await sendUsersList(ctx);
+});
+
 bot.command('stats_weekly', async (ctx) => {
     await sendManualReport(ctx, 'weekly');
 });
@@ -124,35 +128,31 @@ bot.catch(handleBotError);
 // ЗАПУСК БОТА
 // ============================================
 
-// Сбрасываем старые polling-соединения перед стартом
-bot.telegram.deleteWebhook({ drop_pending_updates: true })
-    .then(() => log('info', 'Webhook cleared, starting polling...'))
-    .catch(() => {})
-    .then(() => bot.launch())
-    .then(() => {
-        log('success', `Bot started successfully! Subscription check: ${config.CHECK_SUBSCRIPTION ? 'ENABLED' : 'DISABLED'}`);
-        initScheduler(bot);
-        console.log('\n' + '='.repeat(50));
-        console.log('🤖 BOT CONFIGURATION:');
-        console.log('='.repeat(50));
-        console.log(`📝 Config: environment variables`);
-        console.log(`🔐 Token: ${config.BOT_TOKEN ? '✅ Loaded' : '❌ Missing'}`)
-        console.log(`👤 Admin ID: ${config.ADMIN_ID ? `"${config.ADMIN_ID}"` : '❌ Not set'}`);
-        console.log(`📢 Required channel: ${config.REQUIRED_CHANNEL || 'Not set'}`);
-        console.log(`✓  Subscription check: ${config.CHECK_SUBSCRIPTION ? '🟢 ENABLED' : '🔴 DISABLED'}`);
-        console.log(`⏱  Rate limit: ${config.RATE_LIMIT / 1000} seconds`);
-        console.log(`📁 Logs directory: ${config.LOGS_DIR}`);
-        console.log(`📁 Temp directory: ${config.TEMP_DIR}`);
-        console.log(`🗂  Max files per user: ${config.MAX_FILES_PER_USER}`);
-        console.log(`⏰ File lifetime: ${config.FILE_LIFETIME / 60000} minutes`);
-        console.log('='.repeat(50));
-        console.log('\n💡 Press Ctrl+C to stop the bot\n');
-    })
-    .catch((error) => {
-        log('error', `Bot launch failed: ${error.message}`);
-        console.error('Full error:', error);
-        process.exit(1);
-    });
+// bot.launch() в polling-режиме не резолвит Promise до остановки бота,
+// поэтому инициализацию делаем через onLaunch-колбэк (срабатывает после getMe(), до старта polling)
+bot.launch({ dropPendingUpdates: true }, () => {
+    log('success', `Bot started successfully! Subscription check: ${config.CHECK_SUBSCRIPTION ? 'ENABLED' : 'DISABLED'}`);
+    initScheduler(bot);
+    console.log('\n' + '='.repeat(50));
+    console.log('🤖 BOT CONFIGURATION:');
+    console.log('='.repeat(50));
+    console.log(`📝 Config: environment variables`);
+    console.log(`🔐 Token: ${config.BOT_TOKEN ? '✅ Loaded' : '❌ Missing'}`)
+    console.log(`👤 Admin ID: ${config.ADMIN_ID ? `"${config.ADMIN_ID}"` : '❌ Not set'}`);
+    console.log(`📢 Required channel: ${config.REQUIRED_CHANNEL || 'Not set'}`);
+    console.log(`✓  Subscription check: ${config.CHECK_SUBSCRIPTION ? '🟢 ENABLED' : '🔴 DISABLED'}`);
+    console.log(`⏱  Rate limit: ${config.RATE_LIMIT / 1000} seconds`);
+    console.log(`📁 Logs directory: ${config.LOGS_DIR}`);
+    console.log(`📁 Temp directory: ${config.TEMP_DIR}`);
+    console.log(`🗂  Max files per user: ${config.MAX_FILES_PER_USER}`);
+    console.log(`⏰ File lifetime: ${config.FILE_LIFETIME / 60000} minutes`);
+    console.log('='.repeat(50));
+    console.log('\n💡 Press Ctrl+C to stop the bot\n');
+}).catch((error) => {
+    log('error', `Bot launch failed: ${error.message}`);
+    console.error('Full error:', error);
+    process.exit(1);
+});
 
 // ============================================
 // GRACEFUL SHUTDOWN

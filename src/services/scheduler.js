@@ -1,7 +1,7 @@
 const cron = require('node-cron');
 const config = require('../../config/config');
 const { log } = require('../utils/logger');
-const { getStats, resetStats } = require('../utils/analytics');
+const { getStats, resetStats, getAllUsersList } = require('../utils/analytics');
 const { runHealthcheck } = require('./tiktokHealthcheck');
 const { getPendingUsers, removePending, markPending } = require('../utils/pendingSubscriptions');
 const subscriptionCache = require('../utils/subscriptionCache');
@@ -18,6 +18,8 @@ async function checkUserSubscription(userId, telegram) {
     const tg = telegram || (bot && bot.telegram);
     if (!config.CHECK_SUBSCRIPTION || !tg) return null;
 
+    if (subscriptionCache.isInvalid(userId)) return null;
+
     const cached = subscriptionCache.get(userId);
     if (cached !== undefined) return cached;
 
@@ -27,6 +29,11 @@ async function checkUserSubscription(userId, telegram) {
         subscriptionCache.set(userId, result);
         return result;
     } catch (error) {
+        if (error.message && error.message.includes('PARTICIPANT_ID_INVALID')) {
+            subscriptionCache.markInvalid(userId);
+            log('warning', `User ${userId} marked as invalid (PARTICIPANT_ID_INVALID); future subscription checks skipped`);
+            return null;
+        }
         log('error', `Subscription check error for user ${userId}: ${error.message}`);
         return null;
     }
@@ -170,6 +177,28 @@ function parseTime(timeString) {
     return { hours, minutes };
 }
 
+// Настройка меню и списка команд для админа (per-chat)
+async function setupAdminMenu(botInstance) {
+    const adminId = Number(config.ADMIN_ID);
+    if (!adminId) return;
+
+    try {
+        await botInstance.telegram.setMyCommands([
+            { command: 'stats', description: 'Статистика бота' },
+            { command: 'users', description: 'Список пользователей' }
+        ], { scope: { type: 'chat', chat_id: adminId } });
+
+        await botInstance.telegram.setChatMenuButton({
+            chatId: adminId,
+            menuButton: { type: 'commands' }
+        });
+
+        log('success', `Admin menu configured for ADMIN_ID=${adminId}`);
+    } catch (error) {
+        log('error', `Failed to setup admin menu: ${error.message}`);
+    }
+}
+
 // Инициализация планировщика
 function initScheduler(botInstance) {
     bot = botInstance;
@@ -178,6 +207,8 @@ function initScheduler(botInstance) {
         log('warning', 'ADMIN_ID not configured. Statistics reports are disabled.');
         return;
     }
+
+    setupAdminMenu(botInstance);
 
     const { hours, minutes } = parseTime(config.REPORT_TIME);
     let cronExpression;
@@ -244,6 +275,7 @@ function initScheduler(botInstance) {
 
 // Хранение ID последних отчётов по chatId
 const lastReportMessages = new Map();
+const lastUsersMessages = new Map();
 
 // Отправка отчёта по команде (для тестирования)
 async function sendManualReport(ctx, period = 'daily') {
@@ -276,7 +308,53 @@ async function sendManualReport(ctx, period = 'daily') {
     }
 }
 
+async function sendUsersList(ctx) {
+    const userId = ctx.from.id.toString();
+    const chatId = ctx.chat.id;
+
+    if (config.ADMIN_ID && userId !== config.ADMIN_ID.toString()) {
+        await ctx.reply('❌ У вас нет прав для просмотра списка пользователей.');
+        return;
+    }
+
+    try { await ctx.deleteMessage(); } catch (e) {}
+
+    const prevMessageId = lastUsersMessages.get(chatId);
+    if (prevMessageId) {
+        try { await ctx.telegram.deleteMessage(chatId, prevMessageId); } catch (e) {}
+    }
+
+    try {
+        const { totalUsers, users } = getAllUsersList();
+
+        let message = `👥 *Пользователи бота*\n\n`;
+        message += `Всего: *${totalUsers}*\n\n`;
+
+        if (users.length === 0) {
+            message += `ℹ️ Пока нет пользователей.`;
+        } else {
+            users.forEach((u, i) => {
+                const displayName = (u.username && u.username !== 'Unknown')
+                    ? `@${u.username}`
+                    : `User ${u.userId}`;
+                const link = `[${displayName}](tg://user?id=${u.userId})`;
+                const lastSeen = new Date(u.lastSeen).toLocaleDateString('ru-RU', { timeZone: config.REPORT_TIMEZONE });
+                message += `${i + 1}. ${link} — ${u.totalRequests} запросов · ${lastSeen}\n`;
+            });
+        }
+
+        message += `\n🕐 ${new Date().toLocaleString('ru-RU', { timeZone: config.REPORT_TIMEZONE })}`;
+
+        const sent = await ctx.reply(message, { parse_mode: 'Markdown' });
+        lastUsersMessages.set(chatId, sent.message_id);
+    } catch (error) {
+        log('error', `Failed to send users list: ${error.message}`);
+        await ctx.reply('❌ Ошибка при формировании списка пользователей.');
+    }
+}
+
 module.exports = {
     initScheduler,
-    sendManualReport
+    sendManualReport,
+    sendUsersList
 };

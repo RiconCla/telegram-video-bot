@@ -1,6 +1,33 @@
+const fs = require('fs');
+const path = require('path');
+const { log } = require('./logger');
+
 // Кеш подписок: userId -> { subscribed: boolean, cachedAt: number }
 const cache = new Map();
 const TTL = 12 * 60 * 60 * 1000; // 12 часов
+
+// Перманентно невалидные пользователи (PARTICIPANT_ID_INVALID и т.п.) — не дёргаем API
+const INVALID_FILE = path.resolve(__dirname, '../../data/invalid-subscription-users.json');
+let invalidUsers = new Set();
+
+try {
+    if (fs.existsSync(INVALID_FILE)) {
+        const arr = JSON.parse(fs.readFileSync(INVALID_FILE, 'utf-8'));
+        invalidUsers = new Set(arr.map(String));
+    }
+} catch (e) {
+    log('error', `Failed to load invalid-subscription users: ${e.message}`);
+}
+
+function saveInvalid() {
+    try {
+        const dir = path.dirname(INVALID_FILE);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(INVALID_FILE, JSON.stringify([...invalidUsers], null, 2), 'utf-8');
+    } catch (e) {
+        log('error', `Failed to save invalid-subscription users: ${e.message}`);
+    }
+}
 
 function get(userId) {
     const entry = cache.get(String(userId));
@@ -14,4 +41,16 @@ function set(userId, subscribed) {
     cache.set(String(userId), { subscribed, cachedAt: Date.now() });
 }
 
-module.exports = { get, set };
+function isInvalid(userId) {
+    return invalidUsers.has(String(userId));
+}
+
+function markInvalid(userId) {
+    const key = String(userId);
+    if (!invalidUsers.has(key)) {
+        invalidUsers.add(key);
+        saveInvalid();
+    }
+}
+
+module.exports = { get, set, isInvalid, markInvalid };

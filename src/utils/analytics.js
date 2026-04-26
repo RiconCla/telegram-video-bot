@@ -134,4 +134,19 @@ function getAllStats() {
     };
 }
 
-module.exports = { trackUser, getStats, resetStats, getAllStats };
+function getAllUsersList() {
+    const users = [];
+    userStats.forEach(user => {
+        users.push({
+            userId: user.userId,
+            username: user.username,
+            totalRequests: user.totalRequests,
+            firstSeen: user.firstSeen,
+            lastSeen: user.lastSeen
+        });
+    });
+    users.sort((a, b) => b.totalRequests - a.totalRequests);
+    return { totalUsers: userStats.size, users };
+}
+
+module.exports = { trackUser, getStats, resetStats, getAllStats, getAllUsersList };
