@@ -1,6 +1,6 @@
 # 🤖 Telegram Video Bot
 
-Telegram бот для скачивания видео и изображений из TikTok и Instagram без водяных знаков. Поддерживает карусели, Reels, слайдшоу и одиночные фото.
+Telegram-бот для скачивания видео и изображений из TikTok и Instagram без водяных знаков. Поддерживает Reels, карусели, слайдшоу и одиночные фото. Двуязычный (RU/EN), с админ-статистикой и проверкой подписки на канал.
 
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org/)
 [![Telegraf](https://img.shields.io/badge/Telegraf-4.16-blue)](https://telegraf.js.org/)
@@ -13,46 +13,66 @@ Telegram бот для скачивания видео и изображений
 - [Функционал](#-функционал)
 - [Технологии](#-технологии)
 - [Структура проекта](#-структура-проекта)
+- [Команды](#-команды)
 - [Требования](#-требования)
 - [Установка](#-установка)
 - [Конфигурация](#-конфигурация)
 - [Запуск](#-запуск)
-- [Деплой на VPS](#-деплой-на-vps)
+- [Деплой](#-деплой)
 
 ---
 
 ## ✨ Функционал
 
 ### TikTok
-- ✅ Скачивание видео (HD качество)
-- ✅ Скачивание слайдшоу (до 35 изображений)
+- Скачивание видео (HD-качество через `tikwm.com`)
+- Скачивание слайдшоу (множественные изображения)
+- Приоритет вариантов: `play → wmplay → hdplay`
 
 ### Instagram
-- ✅ Скачивание Reels (видео)
-- ✅ Скачивание постов (фото)
-- ✅ Скачивание каруселей (множественные фото)
-- ✅ Работает через `yt-dlp` — без прокси и внешних API
+- Скачивание Reels (видео)
+- Скачивание постов (одиночные фото и карусели)
+- Основной путь — `yt-dlp`; embed-фоллбек, если yt-dlp не отдал файлы
 
-### Дополнительно
-- 🔒 Проверка подписки на канал (опционально)
-- ⏱️ Защита от спама (rate limiting)
-- 📦 Автосжатие видео через ffmpeg (если > 50 МБ)
-- 🗑️ Автоматическое удаление временных файлов через 10 минут
-- 📊 Детальное логирование всех действий
-- 📈 Статистика пользователей с автоматическими отчётами администратору (день/неделя/месяц)
+### Пользовательский UX
+- Двуязычный интерфейс (RU/EN), команда `/lang` для смены
+- Inline-кнопки выбора языка при `/start`
+- Опция «не показывать выбор языка повторно»
+- Опциональная проверка подписки на обязательный канал
+- Напоминания о подписке через настраиваемый интервал (5 дней по умолчанию)
+- Rate limiting (1 запрос/сек на пользователя)
+
+### Админ-функции
+- Persistent menu-кнопка с командами `/stats` и `/users` (только для админа)
+- Ежедневные/еженедельные/ежемесячные отчёты по статистике
+- Список пользователей с разбивкой длинного списка на чанки
+- Маркер `❓` для пользователей с `PARTICIPANT_ID_INVALID` + кеш, чтобы не дёргать API повторно
+
+### Технические детали
+- Сжатие видео через `ffmpeg` при превышении 50 МБ
+- Нормализация кодека для совместимости с iOS/macOS
+- Авто-удаление временных файлов через 10 минут
+- Лимит 15 файлов на пользователя
+- Дебаунс записи stats.json (1с) и invalid-users (1с)
+- Параллельная проверка подписок (пул из 5) при формировании отчёта
+- Кеш подписок на 12 часов
+- Поддержка SOCKS5-прокси для Telegram API и yt-dlp (для серверов в РФ)
 
 ---
 
 ## 🛠 Технологии
 
-- **Node.js** — среда выполнения
-- **Telegraf 4.16** — Telegram Bot API фреймворк
-- **yt-dlp** — скачивание медиа из Instagram (системная утилита)
-- **ffmpeg** — сжатие видео
-- **axios** — HTTP клиент (TikTok API)
-- **dotenv** — управление переменными окружения
-- **PM2** — менеджер процессов
-- **tikwm.com API** — TikTok downloader
+| Категория | Стек |
+|---|---|
+| Runtime | Node.js 18+ |
+| Bot framework | Telegraf 4.16 |
+| HTTP client | axios 1.13 |
+| Cron | node-cron 4 |
+| Proxy | socks-proxy-agent 8 |
+| Env | dotenv 16 |
+| Внешние утилиты | `yt-dlp` (Instagram), `ffmpeg`/`ffprobe` (компрессия) |
+| Внешний API | `tikwm.com` (TikTok) |
+| Process manager | PM2 (опционально) или Docker |
 
 ---
 
@@ -60,213 +80,221 @@ Telegram бот для скачивания видео и изображений
 
 ```
 telegram-video-bot/
-├── bot.js                  # Точка входа
+├── bot.js                          # Точка входа, регистрация команд и middleware
 ├── package.json
-├── credit.env              # Переменные окружения (НЕ коммитить!)
-├── deploy.sh               # Скрипт автодеплоя
+├── credit.env                      # Переменные окружения (НЕ коммитить!)
+├── deploy.sh                       # Скрипт автодеплоя через PM2
+├── setup.sh                        # Установка системных зависимостей
+├── Dockerfile                      # Образ для Docker/Docploy
+├── .dockerignore
 ├── config/
-│   └── config.js           # Конфигурация приложения
+│   └── config.js                   # Конфигурация приложения
 ├── src/
-│   ├── utils/
-│   │   ├── logger.js       # Логирование
-│   │   ├── fileManager.js  # Управление временными файлами
-│   │   ├── analytics.js    # Статистика пользователей
-│   │   └── messages.js     # Текстовые сообщения бота
+│   ├── handlers/
+│   │   ├── start.js                # /start, выбор языка, кнопка активации
+│   │   ├── lang.js                 # /lang, смена языка
+│   │   ├── url.js                  # Обработка ссылок TikTok/Instagram
+│   │   └── error.js                # bot.catch handler
+│   ├── locales/
+│   │   ├── en.js                   # Английская локаль
+│   │   └── ru.js                   # Русская локаль
 │   ├── middleware/
-│   │   ├── rateLimit.js    # Rate limiting
-│   │   ├── subscription.js # Проверка подписки на канал
-│   │   └── validation.js   # Валидация URL
+│   │   ├── rateLimit.js            # Rate limiting (1 req/sec)
+│   │   ├── subscription.js         # Проверка подписки на канал
+│   │   └── validation.js           # Валидация URL TikTok/Instagram
 │   ├── services/
-│   │   ├── downloader.js   # Скачивание медиа по URL (TikTok)
-│   │   ├── tiktok.js       # TikTok API интеграция
-│   │   ├── instagram.js    # Instagram через yt-dlp
-│   │   ├── scheduler.js    # Планировщик отчётов
-│   │   └── tiktokHealthcheck.js
-│   └── handlers/
-│       ├── start.js        # /start
-│       ├── url.js          # Обработка ссылок
-│       └── error.js        # Обработка ошибок
-├── logs/                   # Генерируются автоматически
-└── temp/                   # Временные файлы (очищаются автоматически)
+│   │   ├── downloader.js           # HTTP-скачивание медиа по URL (TikTok)
+│   │   ├── tiktok.js               # tikwm.com API интеграция
+│   │   ├── instagram.js            # Instagram через yt-dlp + embed-фоллбек
+│   │   └── scheduler.js            # Cron-отчёты, /stats, /users, admin menu
+│   └── utils/
+│       ├── logger.js               # Логирование (console + файл с ротацией 7 дней)
+│       ├── fileManager.js          # Управление временными файлами
+│       ├── compressor.js           # ffmpeg-сжатие и нормализация кодека
+│       ├── analytics.js            # Статистика пользователей (debounced persist)
+│       ├── i18n.js                 # Локали + персист языковых настроек
+│       ├── pendingSubscriptions.js # Очередь напоминаний о подписке
+│       └── subscriptionCache.js    # TTL-кеш + permanent invalid-list
+├── data/                           # Персистентное состояние (генерируется)
+│   ├── stats.json
+│   ├── users.json
+│   ├── pending-subscriptions.json
+│   └── invalid-subscription-users.json
+├── logs/                           # Лог-файлы (ротация 7 дней)
+└── temp/                           # Временные медиафайлы (TTL 10 мин)
 ```
+
+---
+
+## 💬 Команды
+
+| Команда | Описание | Доступ |
+|---|---|---|
+| `/start` | Старт бота, выбор языка | все |
+| `/lang` | Сменить язык | все |
+| `/stats` | Статистика за текущий день | админ |
+| `/stats_weekly` | Статистика за неделю | админ |
+| `/stats_monthly` | Статистика за месяц | админ |
+| `/users` | Полный список пользователей бота | админ |
+
+У админа в Telegram-чате с ботом появляется persistent **Menu**-кнопка с быстрым доступом к `/stats` и `/users`.
 
 ---
 
 ## 📦 Требования
 
-- **Node.js** >= 18.x
-- **npm** >= 9.x
+- **Node.js** ≥ 18.x
+- **npm** ≥ 9.x
 - **yt-dlp** (системная утилита — обязательно для Instagram)
-- **ffmpeg** (для сжатия видео)
-- **PM2** (для production)
-- **Ubuntu/Debian** (рекомендуется)
+- **ffmpeg** + **ffprobe** (для сжатия и нормализации видео)
+- **PM2** (опционально — для production без Docker)
+- **Docker** (опционально — для Docploy/контейнерного деплоя)
 
 ---
 
 ## 🚀 Установка
 
-### 1. Клонируйте репозиторий
+### 1. Клонировать репозиторий
 
 ```bash
 git clone https://github.com/RiconCla/telegram-video-bot.git
 cd telegram-video-bot
 ```
 
-### 2. Установите системные зависимости
+### 2. Установить системные зависимости
 
 ```bash
-# ffmpeg
-sudo apt-get install -y ffmpeg
+# одной командой (Debian/Ubuntu/CentOS/Fedora)
+./setup.sh
 
-# yt-dlp
+# либо вручную
+sudo apt-get install -y ffmpeg
 sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
 sudo chmod a+rx /usr/local/bin/yt-dlp
 ```
 
-### 3. Установите npm зависимости
+### 3. Установить npm-зависимости
 
 ```bash
 npm install
 ```
 
-### 4. Создайте файл конфигурации
+### 4. Создать файл конфигурации
 
 ```bash
-cp credit.env.example credit.env
-nano credit.env
+cp credit.env.example credit.env  # если есть пример, иначе создайте вручную
 ```
 
 ---
 
 ## ⚙️ Конфигурация
 
-Создайте файл `credit.env`:
+Создайте файл `credit.env` в корне проекта:
 
 ```env
 # ============================================
 # TELEGRAM BOT
 # ============================================
-
-# Токен бота — получить у @BotFather
 BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
-
-# Канал для проверки подписки (@channelname или -100123456789)
 REQUIRED_CHANNEL=@your_channel
-
-# Включить проверку подписки (true/false)
-CHECK_SUBSCRIPTION=false
+CHECK_SUBSCRIPTION=true
 
 # ============================================
-# PROXY (обязательно для серверов в РФ)
+# PROXY (для серверов в РФ)
 # ============================================
-
-# SOCKS5 прокси для подключения к Telegram API
-# Используется ss-local (Shadowsocks/Outline) на том же сервере
+# SOCKS5-прокси для Telegram API и yt-dlp.
+# Требуется отдельно поднятый ss-local (Shadowsocks/Outline).
 PROXY_HOST=127.0.0.1
 PROXY_PORT=1080
 
 # ============================================
 # СТАТИСТИКА И ОТЧЁТЫ
 # ============================================
-
-# Telegram ID администратора (узнать у @userinfobot)
-ADMIN_ID=123456789
-
-# Периодичность отчётов: daily / weekly / monthly
-REPORT_FREQUENCY=daily
-
-# Время отправки отчёта (ЧЧ:ММ)
-REPORT_TIME=20:00
-
-# Часовой пояс
+ADMIN_ID=123456789                 # узнать через @userinfobot
+REPORT_FREQUENCY=daily             # daily / weekly / monthly
+REPORT_TIME=20:00                  # время по REPORT_TIMEZONE
 REPORT_TIMEZONE=Europe/Moscow
+
+# ============================================
+# НАПОМИНАНИЯ О ПОДПИСКЕ
+# ============================================
+SUBSCRIPTION_REMINDER_DAYS=5       # 0 — отключить напоминания
 ```
 
-### 📝 Получение токена бота
+> **Важно:** `dotenv` по умолчанию читает `.env`. Чтобы загрузить именно `credit.env`, запускайте бота через `node -r dotenv/config bot.js dotenv_config_path=credit.env` или переименуйте файл в `.env`.
+
+### Получение токена бота
 
 1. Откройте Telegram, найдите `@BotFather`
 2. Создайте бота командой `/newbot`
 3. Вставьте полученный токен в `BOT_TOKEN`
 
+### Опциональные параметры прокси
+
+`SHADOWSOCKS_*` переменные в `credit.env` сохранены как метаданные сессии и **не используются кодом напрямую** — бот ждёт уже готовый SOCKS5 на `PROXY_HOST:PROXY_PORT` (поднимается отдельным `ss-local`).
+
 ---
 
 ## 🎮 Запуск
 
-### Локально (для разработки)
+### Локально / dev-стенд
 
 ```bash
-node bot.js
+node -r dotenv/config bot.js dotenv_config_path=credit.env
 ```
 
-### Production (PM2)
+### Production через PM2
 
 ```bash
-# Установить PM2
 npm install -g pm2
-
-# Запустить
 pm2 start bot.js --name telegram-video-bot
-
-# Сохранить конфигурацию и включить автозапуск
 pm2 save
 pm2 startup
 ```
 
-### Управление PM2
+Управление:
 
 ```bash
-pm2 status                          # статус
-pm2 logs telegram-video-bot         # логи в реальном времени
-pm2 restart telegram-video-bot      # перезапуск
-pm2 stop telegram-video-bot         # остановка
+pm2 status
+pm2 logs telegram-video-bot
+pm2 restart telegram-video-bot --update-env
+pm2 stop telegram-video-bot
+```
+
+### Production через Docker
+
+```bash
+docker build -t telegram-video-bot .
+docker run -d --name telegram-video-bot \
+  --env-file credit.env \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/logs:/app/logs \
+  telegram-video-bot
 ```
 
 ---
 
-## 🖥️ Деплой на VPS
+## 🖥️ Деплой
 
-### 1. Подключитесь к серверу
+### PM2 + bash-скрипт
 
-```bash
-ssh user@your-vps-ip
-```
-
-### 2. Установите окружение
+В репозитории лежит `deploy.sh` — pull + npm install + `pm2 reload`. Используйте его на VPS:
 
 ```bash
-# Node.js 18.x
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt-get install -y nodejs git ffmpeg
-
-# yt-dlp
-sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-sudo chmod a+rx /usr/local/bin/yt-dlp
-
-# PM2
-sudo npm install -g pm2
+./deploy.sh
 ```
 
-### 3. Клонируйте и настройте
+### Docker / Docploy
 
-```bash
-git clone https://github.com/RiconCla/telegram-video-bot.git
-cd telegram-video-bot
-npm install
-nano credit.env
-```
+`Dockerfile` использует `node:18-alpine` + ставит `ffmpeg` и `yt-dlp` в образ. `.dockerignore` исключает `credit.env`, `data/`, `logs/`, `temp/`, `pics/`, `*.exe`. Для деплоя через Docploy достаточно подсунуть переменные окружения и примонтировать `data/` + `logs/` для сохранения состояния между перезапусками.
 
-### 4. Запустите
-
-```bash
-pm2 start bot.js --name telegram-video-bot
-pm2 save
-pm2 startup
-```
-
-### 5. Обновление бота
+### Обновление
 
 ```bash
 cd ~/telegram-video-bot
 git pull origin main
+npm ci --omit=dev          # подтянет зависимости
 pm2 restart telegram-video-bot --update-env
+# либо для Docker:
+docker build -t telegram-video-bot . && docker restart telegram-video-bot
 ```

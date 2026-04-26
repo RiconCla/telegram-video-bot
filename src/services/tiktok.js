@@ -1,7 +1,8 @@
 const axios = require('axios');
 const config = require('../../config/config');
 const { log } = require('../utils/logger');
-const { getCurrentPriority } = require('./tiktokHealthcheck');
+
+const VIDEO_URL_PRIORITY = ['play', 'wmplay', 'hdplay'];
 
 async function downloadTiktok(url, userId) {
     try {
@@ -30,15 +31,11 @@ async function downloadTiktok(url, userId) {
                 };
             }
 
-            // ПОТОМ проверяем видео с ДИНАМИЧЕСКИМ приоритетом
-            const priority = getCurrentPriority();
-            log('info', `Using TikTok priority: ${priority.join(' > ')}`, userId);
-
             let videoUrl = null;
             let videoType = null;
 
             // Проходим по приоритету и выбираем первый доступный URL
-            for (const type of priority) {
+            for (const type of VIDEO_URL_PRIORITY) {
                 if (data[type]) {
                     videoUrl = data[type];
                     videoType = type;

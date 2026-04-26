@@ -2,7 +2,6 @@ const cron = require('node-cron');
 const config = require('../../config/config');
 const { log } = require('../utils/logger');
 const { getStats, resetStats, getAllUsersList } = require('../utils/analytics');
-const { runHealthcheck } = require('./tiktokHealthcheck');
 const { getPendingUsers, removePending, markPending } = require('../utils/pendingSubscriptions');
 const subscriptionCache = require('../utils/subscriptionCache');
 const { Markup } = require('telegraf');
@@ -248,17 +247,6 @@ function initScheduler(botInstance) {
 
     log('success', `Report scheduler initialized successfully!`);
 
-    // Планируем проверку TikTok API каждые 4 часа
-    cron.schedule('0 */4 * * *', () => {
-        log('info', 'Running scheduled TikTok API healthcheck...');
-        runHealthcheck(bot);
-    }, {
-        scheduled: true,
-        timezone: config.REPORT_TIMEZONE
-    });
-
-    log('success', 'TikTok healthcheck scheduler initialized (every 4 hours)');
-
     // Напоминание о подписке — каждый день в 12:00
     if (config.CHECK_SUBSCRIPTION && config.SUBSCRIPTION_REMINDER_DAYS > 0) {
         cron.schedule('0 12 * * *', () => {
@@ -270,12 +258,6 @@ function initScheduler(botInstance) {
         });
         log('success', `Subscription reminder scheduler initialized (every ${config.SUBSCRIPTION_REMINDER_DAYS} days)`);
     }
-
-    // Запускаем первую проверку через 1 минуту после старта
-    setTimeout(() => {
-        log('info', 'Running initial TikTok API healthcheck...');
-        runHealthcheck(bot);
-    }, 60000);
 }
 
 // Хранение ID последних отчётов по chatId

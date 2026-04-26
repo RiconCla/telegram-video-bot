@@ -16,7 +16,6 @@ const { isUserActive } = require('./src/utils/i18n');
 const { handleBotError } = require('./src/handlers/error');
 const { initScheduler, sendManualReport, sendUsersList } = require('./src/services/scheduler');
 const { trackUser } = require('./src/utils/analytics');
-const { runHealthcheck } = require('./src/services/tiktokHealthcheck');
 const { SocksProxyAgent } = require('socks-proxy-agent');
 
 // Прокси для Telegram API (обязательно для серверов в РФ)
@@ -83,20 +82,6 @@ bot.command('stats_weekly', async (ctx) => {
 bot.command('stats_monthly', async (ctx) => {
     await sendManualReport(ctx, 'monthly');
 });
-
-bot.command('check_tiktok', async (ctx) => {
-    const userId = ctx.from.id.toString();
-
-    if (!config.ADMIN_ID || userId !== config.ADMIN_ID.toString()) {
-        await ctx.reply('❌ No permission for this command.');
-        return;
-    }
-
-    await ctx.reply('🔍 Running TikTok API check...');
-    await runHealthcheck(bot);
-    await ctx.reply('✅ Check complete. See logs for details.');
-});
-
 
 // ============================================
 // ОБРАБОТКА ТЕКСТОВЫХ СООБЩЕНИЙ (ССЫЛОК)
