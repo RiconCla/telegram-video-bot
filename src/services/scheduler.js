@@ -56,14 +56,19 @@ async function formatReport(stats, telegram) {
             break;
     }
 
-    // Проверяем подписку пользователей последовательно (избегаем rate limit)
+    // Параллельная проверка подписок: пул из 5 воркеров.
+    // Ограничение 5 безопасно для Bot API (лимит ~30 req/s); кеш + invalid-list дополнительно срезают трафик.
     const subscriptionStatuses = new Map();
     if (config.CHECK_SUBSCRIPTION && userList.length > 0) {
-        for (const user of userList) {
-            const subscribed = await checkUserSubscription(user.userId, telegram);
-            subscriptionStatuses.set(user.userId, subscribed);
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
+        const queue = [...userList];
+        const worker = async () => {
+            while (queue.length) {
+                const user = queue.shift();
+                const subscribed = await checkUserSubscription(user.userId, telegram);
+                subscriptionStatuses.set(user.userId, subscribed);
+            }
+        };
+        await Promise.all(Array.from({ length: 5 }, worker));
     }
 
     let message = `📊 *Статистика бота ${periodName}*\n\n`;
@@ -283,7 +288,7 @@ async function sendManualReport(ctx, period = 'daily') {
     const chatId = ctx.chat.id;
 
     // Проверяем, является ли пользователь администратором
-    if (config.ADMIN_ID && userId !== config.ADMIN_ID.toString()) {
+    if (!config.ADMIN_ID || userId !== config.ADMIN_ID.toString()) {
         await ctx.reply('❌ У вас нет прав для просмотра статистики.');
         return;
     }
@@ -312,7 +317,7 @@ async function sendUsersList(ctx) {
     const userId = ctx.from.id.toString();
     const chatId = ctx.chat.id;
 
-    if (config.ADMIN_ID && userId !== config.ADMIN_ID.toString()) {
+    if (!config.ADMIN_ID || userId !== config.ADMIN_ID.toString()) {
         await ctx.reply('❌ У вас нет прав для просмотра списка пользователей.');
         return;
     }

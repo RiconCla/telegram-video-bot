@@ -104,6 +104,13 @@ async function downloadInstagram(url, userId) {
         });
 
     if (newFiles.length === 0) {
+        // yt-dlp вышел с кодом 0, но скачал 0 файлов (Instagram вернул пустой playlist).
+        // Пробуем embed-фоллбек — часто помогает для постов с anti-scraping ограничениями.
+        log('warning', 'yt-dlp ran but downloaded 0 files; trying embed fallback', userId);
+        const fallbackFiles = await downloadInstagramViaEmbed(url, userId, userDir);
+        if (fallbackFiles && fallbackFiles.length > 0) {
+            return buildResult(fallbackFiles, userId);
+        }
         log('error', 'yt-dlp ran but no new files found in user dir', userId);
         return { success: false };
     }

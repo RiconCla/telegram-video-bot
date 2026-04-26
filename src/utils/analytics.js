@@ -36,20 +36,25 @@ function loadFromFile() {
     return null;
 }
 
+let saveTimer = null;
+
 function saveToFile() {
-    try {
-        ensureDataDir();
-        const data = {
-            userStats: Object.fromEntries(userStats),
-            dailyUsers: [...dailyUsers],
-            weeklyUsers: [...weeklyUsers],
-            monthlyUsers: [...monthlyUsers],
-            statsHistory
-        };
-        fs.writeFileSync(STATS_FILE, JSON.stringify(data, null, 2), 'utf-8');
-    } catch (e) {
-        log('error', `Failed to save stats to file: ${e.message}`);
-    }
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+        try {
+            ensureDataDir();
+            const data = {
+                userStats: Object.fromEntries(userStats),
+                dailyUsers: [...dailyUsers],
+                weeklyUsers: [...weeklyUsers],
+                monthlyUsers: [...monthlyUsers],
+                statsHistory
+            };
+            fs.writeFileSync(STATS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+        } catch (e) {
+            log('error', `Failed to save stats to file: ${e.message}`);
+        }
+    }, 1000);
 }
 
 // --- Загрузка при старте ---
@@ -125,15 +130,6 @@ function resetStats(period) {
     saveToFile(); // 💾 Сохраняем после сброса
 }
 
-function getAllStats() {
-    return {
-        daily: getStats('daily'),
-        weekly: getStats('weekly'),
-        monthly: getStats('monthly'),
-        totalUsers: userStats.size
-    };
-}
-
 function getAllUsersList() {
     const users = [];
     userStats.forEach(user => {
@@ -149,4 +145,4 @@ function getAllUsersList() {
     return { totalUsers: userStats.size, users };
 }
 
-module.exports = { trackUser, getStats, resetStats, getAllStats, getAllUsersList };
+module.exports = { trackUser, getStats, resetStats, getAllUsersList };

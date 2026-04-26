@@ -21,7 +21,10 @@
       "Bash(\"C:/Users/Artem/Desktop/bot/telegram-video-bot/ffmpeg.exe\" -version)",
       "Bash(\"C:/Users/Artem/Desktop/bot/telegram-video-bot/ffprobe.exe\" -version)",
       "WebFetch(domain:docs.dokploy.com)",
-      "Bash(npm --version)"
+      "Bash(npm --version)",
+      "Bash(npm list *)",
+      "Bash(npm ls *)",
+      "WebFetch(domain:www.instagram.com)"
     ]
   }
 }

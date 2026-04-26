@@ -19,14 +19,19 @@ try {
     log('error', `Failed to load invalid-subscription users: ${e.message}`);
 }
 
+let saveTimer = null;
+
 function saveInvalid() {
-    try {
-        const dir = path.dirname(INVALID_FILE);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(INVALID_FILE, JSON.stringify([...invalidUsers], null, 2), 'utf-8');
-    } catch (e) {
-        log('error', `Failed to save invalid-subscription users: ${e.message}`);
-    }
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+        try {
+            const dir = path.dirname(INVALID_FILE);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(INVALID_FILE, JSON.stringify([...invalidUsers], null, 2), 'utf-8');
+        } catch (e) {
+            log('error', `Failed to save invalid-subscription users: ${e.message}`);
+        }
+    }, 1000);
 }
 
 function get(userId) {

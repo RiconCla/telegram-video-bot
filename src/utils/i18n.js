@@ -83,10 +83,6 @@ function getUserLanguage(userId) {
     return userLanguages.get(String(userId)) || null;
 }
 
-function hasLanguage(userId) {
-    return userLanguages.has(String(userId));
-}
-
 // ─────────────────────────────────────────────
 // "Не спрашивать про смену языка"
 // ─────────────────────────────────────────────
@@ -117,7 +113,6 @@ module.exports = {
     getLocale,
     setLanguage,
     getUserLanguage,
-    hasLanguage,
     hasNoAskLang,
     setNoAskLang,
     isUserActive,

@@ -201,6 +201,5 @@ loadPriority();
 
 module.exports = {
     runHealthcheck,
-    getCurrentPriority,
-    loadPriority
+    getCurrentPriority
 };

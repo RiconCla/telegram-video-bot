@@ -47,9 +47,9 @@ function log(level, message, userId = null) {
 
     console.log(`${colors[level] || colors.info}${logMessage}${colors.reset}`);
 
-    // Записываем в файл
+    // Записываем в файл (async — не блокируем event loop, ошибки игнорируем)
     const logFile = path.join(config.LOGS_DIR, `bot-${new Date().toISOString().split('T')[0]}.log`);
-    fs.appendFileSync(logFile, logMessage + '\n');
+    fs.appendFile(logFile, logMessage + '\n', () => {});
 }
 
 module.exports = { log };

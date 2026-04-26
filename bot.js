@@ -87,7 +87,7 @@ bot.command('stats_monthly', async (ctx) => {
 bot.command('check_tiktok', async (ctx) => {
     const userId = ctx.from.id.toString();
 
-    if (config.ADMIN_ID && userId !== config.ADMIN_ID.toString()) {
+    if (!config.ADMIN_ID || userId !== config.ADMIN_ID.toString()) {
         await ctx.reply('❌ No permission for this command.');
         return;
     }
