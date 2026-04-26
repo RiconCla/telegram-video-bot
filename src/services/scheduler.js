@@ -313,6 +313,9 @@ async function sendManualReport(ctx, period = 'daily') {
     }
 }
 
+// Telegram message limit — 4096 символов; пакуем чанки с запасом на header/footer
+const USERS_CHUNK_LIMIT = 3800;
+
 async function sendUsersList(ctx) {
     const userId = ctx.from.id.toString();
     const chatId = ctx.chat.id;
@@ -324,34 +327,55 @@ async function sendUsersList(ctx) {
 
     try { await ctx.deleteMessage(); } catch (e) {}
 
-    const prevMessageId = lastUsersMessages.get(chatId);
-    if (prevMessageId) {
-        try { await ctx.telegram.deleteMessage(chatId, prevMessageId); } catch (e) {}
+    const prevMessageIds = lastUsersMessages.get(chatId);
+    if (prevMessageIds && prevMessageIds.length) {
+        for (const id of prevMessageIds) {
+            try { await ctx.telegram.deleteMessage(chatId, id); } catch (e) {}
+        }
     }
 
     try {
         const { totalUsers, users } = getAllUsersList();
 
-        let message = `👥 *Пользователи бота*\n\n`;
-        message += `Всего: *${totalUsers}*\n\n`;
+        const header = `👥 *Пользователи бота*\n\nВсего: *${totalUsers}*\n\n`;
+        const footer = `\n🕐 ${new Date().toLocaleString('ru-RU', { timeZone: config.REPORT_TIMEZONE })}`;
 
-        if (users.length === 0) {
-            message += `ℹ️ Пока нет пользователей.`;
-        } else {
-            users.forEach((u, i) => {
+        const rows = users.length === 0
+            ? [`ℹ️ Пока нет пользователей.`]
+            : users.map((u, i) => {
                 const displayName = (u.username && u.username !== 'Unknown')
                     ? `@${u.username}`
                     : `User ${u.userId}`;
                 const link = `[${displayName}](tg://user?id=${u.userId})`;
                 const lastSeen = new Date(u.lastSeen).toLocaleDateString('ru-RU', { timeZone: config.REPORT_TIMEZONE });
-                message += `${i + 1}. ${link} — ${u.totalRequests} запросов · ${lastSeen}\n`;
+                return `${i + 1}. ${link} — ${u.totalRequests} запросов · ${lastSeen}\n`;
             });
+
+        // Пакуем строки в чанки
+        const chunks = [];
+        let current = header;
+        for (const row of rows) {
+            if (current.length + row.length > USERS_CHUNK_LIMIT) {
+                chunks.push(current);
+                current = '';
+            }
+            current += row;
+        }
+        if (current) chunks.push(current);
+
+        // Footer кладём в последний чанк (если влезает) или отдельным
+        if (chunks.length && chunks[chunks.length - 1].length + footer.length <= USERS_CHUNK_LIMIT) {
+            chunks[chunks.length - 1] += footer;
+        } else {
+            chunks.push(footer.trimStart());
         }
 
-        message += `\n🕐 ${new Date().toLocaleString('ru-RU', { timeZone: config.REPORT_TIMEZONE })}`;
-
-        const sent = await ctx.reply(message, { parse_mode: 'Markdown' });
-        lastUsersMessages.set(chatId, sent.message_id);
+        const sentIds = [];
+        for (const chunk of chunks) {
+            const sent = await ctx.reply(chunk, { parse_mode: 'Markdown' });
+            sentIds.push(sent.message_id);
+        }
+        lastUsersMessages.set(chatId, sentIds);
     } catch (error) {
         log('error', `Failed to send users list: ${error.message}`);
         await ctx.reply('❌ Ошибка при формировании списка пользователей.');

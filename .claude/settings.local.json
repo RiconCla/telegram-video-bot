@@ -24,7 +24,13 @@
       "Bash(npm --version)",
       "Bash(npm list *)",
       "Bash(npm ls *)",
-      "WebFetch(domain:www.instagram.com)"
+      "WebFetch(domain:www.instagram.com)",
+      "Bash(git config *)",
+      "Bash(git --version)",
+      "Bash(git -C C:/Users/Artem/Desktop/bot/telegram-video-bot status --short)",
+      "Bash(git -C C:/Users/Artem/Desktop/bot/telegram-video-bot log --oneline -10)",
+      "Bash(git -C C:/Users/Artem/Desktop/bot/telegram-video-bot log origin/main..HEAD --oneline)",
+      "Bash(git *)"
     ]
   }
 }
