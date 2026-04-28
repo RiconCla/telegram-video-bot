@@ -12,6 +12,8 @@ const fs = require('fs');
 const { trackUser } = require('../utils/analytics');
 const { compressVideo, ensureCompatible, getVideoMeta } = require('../utils/compressor');
 const { markPending } = require('../utils/pendingSubscriptions');
+// ── autoposter integration ──
+const { prepareBatch, isEnabled: isForwardEnabled } = require('../services/forwardQueue');
 
 async function handleUrl(ctx, isActive) {
     const userId = ctx.from.id;
@@ -21,19 +23,15 @@ async function handleUrl(ctx, isActive) {
 
     trackUser(userId, username);
 
-    // Если пользователь ещё не активировал бота
     if (!isActive) {
         log('warning', 'User sent message without activating bot', userId);
         await ctx.reply(
             messages.NOT_ACTIVATED,
-            Markup.keyboard([
-                [messages.LAUNCH_BUTTON]
-            ]).resize()
+            Markup.keyboard([[messages.LAUNCH_BUTTON]]).resize()
         );
         return;
     }
 
-    // Проверка подписки на канал при каждом запросе
     const isSubscribed = await checkSubscription(ctx);
     if (!isSubscribed) {
         log('warning', 'User not subscribed to required channel', userId);
@@ -51,20 +49,17 @@ async function handleUrl(ctx, isActive) {
     log('info', `Received URL: ${messageText}`, userId);
 
     const validation = validateUrl(messageText);
-
     if (!validation.isTiktok && !validation.isInstagram) {
         log('warning', 'Invalid URL received', userId);
         await ctx.reply(messages.INVALID_URL);
         return;
     }
 
-    // Показываем сообщение о загрузке
     const loadingMsg = await ctx.reply(messages.LOADING);
     log('info', 'Download started', userId);
 
     try {
         let result;
-
         if (validation.isTiktok) {
             result = await downloadTiktok(messageText, userId);
         } else if (validation.isInstagram) {
@@ -72,13 +67,37 @@ async function handleUrl(ctx, isActive) {
         }
 
         if (result.success) {
+            // forwardItems заполняется handle*-функциями — список локальных файлов
+            const forwardItems = [];
+
             if (result.type === 'video') {
-                await handleVideo(ctx, result, validation, userId, loadingMsg, messages);
+                await handleVideo(ctx, result, validation, userId, loadingMsg, messages, forwardItems);
             } else if (result.type === 'image' || Array.isArray(result.url)) {
-                await handleImages(ctx, result, validation, userId, loadingMsg, messages);
+                await handleImages(ctx, result, validation, userId, loadingMsg, messages, forwardItems);
             }
 
             log('success', 'Media sent successfully', userId);
+
+            // Спрашиваем про автопостер только если форвард включён И это сам владелец.
+            // prepareBatch копирует файлы в shared volume СРАЗУ — переживут штатный cleanup.
+            if (isForwardEnabled() && forwardItems.length > 0) {
+                const token = prepareBatch({
+                    userId,
+                    sourceUrl: messageText,
+                    items: forwardItems,
+                });
+                if (token) {
+                    await ctx.reply(
+                        '➕ Добавить в очередь паблика?',
+                        Markup.inlineKeyboard([
+                            [
+                                Markup.button.callback('✅ Да', `fwd:y:${token}`),
+                                Markup.button.callback('❌ Нет', `fwd:n:${token}`),
+                            ],
+                        ])
+                    );
+                }
+            }
 
             const sendNewLinkExtra = hasNoAskLang(userId)
                 ? {}
@@ -99,12 +118,11 @@ async function handleUrl(ctx, isActive) {
     }
 }
 
-async function handleVideo(ctx, result, validation, userId, loadingMsg, messages) {
+async function handleVideo(ctx, result, validation, userId, loadingMsg, messages, forwardItems) {
     log('info', 'Sending video to user', userId);
 
     let finalPath;
     if (validation.isInstagram) {
-        // Нормализуем кодек для совместимости с Apple (iOS/macOS)
         const compatPath = await ensureCompatible(result.url, userId);
         finalPath = await compressVideo(compatPath, userId);
         if (finalPath !== compatPath && fs.existsSync(compatPath)) {
@@ -134,21 +152,29 @@ async function handleVideo(ctx, result, validation, userId, loadingMsg, messages
     }
     await ctx.replyWithVideo(Input.fromLocalFile(finalPath), videoOpts);
 
+    if (Array.isArray(forwardItems) && fs.existsSync(finalPath)) {
+        forwardItems.push({ path: finalPath, kind: 'video' });
+    }
+
     const uploadTime = ((Date.now() - startTime) / 1000).toFixed(2);
     log('success', `Video sent successfully in ${uploadTime}s`, userId);
 }
 
-async function handleImages(ctx, result, validation, userId, loadingMsg, messages) {
+async function handleImages(ctx, result, validation, userId, loadingMsg, messages, forwardItems) {
     if (Array.isArray(result.url)) {
-        await handleImageCarousel(ctx, result, validation, userId, loadingMsg, messages);
+        await handleImageCarousel(ctx, result, validation, userId, loadingMsg, messages, forwardItems);
     } else {
-        await handleSingleImage(ctx, result, validation, userId, loadingMsg, messages);
+        await handleSingleImage(ctx, result, validation, userId, loadingMsg, messages, forwardItems);
     }
 }
 
-async function handleImageCarousel(ctx, result, validation, userId, loadingMsg, messages) {
+async function handleImageCarousel(ctx, result, validation, userId, loadingMsg, messages, forwardItems) {
     const totalImages = result.url.length;
     log('info', `Sending ${totalImages} images to user as media groups`, userId);
+
+    // ВАЖНО: один TikTok/Instagram пост = один пост в autoposter,
+    // даже если карусель из 12+ фото шлётся пользователю несколькими media-groups.
+    const allImagePaths = [];
 
     try {
         await editMessage(ctx, loadingMsg, messages.sendingImages(totalImages));
@@ -197,20 +223,17 @@ async function handleImageCarousel(ctx, result, validation, userId, loadingMsg, 
                 totalSent += imagePaths.length;
                 log('success', `Sent batch ${batch + 1}: ${imagePaths.length} images`, userId);
 
-                for (const p of imagePaths) {
-                    try {
-                        if (fs.existsSync(p)) {
-                            fs.unlinkSync(p);
-                            log('info', `Deleted temp file: ${p.split('/').pop()}`, userId);
-                        }
-                    } catch (deleteError) {
-                        log('warning', `Could not delete file: ${p}`, userId);
-                    }
-                }
+                allImagePaths.push(...imagePaths);
             }
 
             if (batch < batches - 1) {
                 await new Promise(resolve => setTimeout(resolve, 500));
+            }
+        }
+
+        if (Array.isArray(forwardItems)) {
+            for (const p of allImagePaths) {
+                if (fs.existsSync(p)) forwardItems.push({ path: p, kind: 'photo' });
             }
         }
 
@@ -224,9 +247,11 @@ async function handleImageCarousel(ctx, result, validation, userId, loadingMsg, 
         log('error', `Failed to send media groups: ${sendError.message}`, userId);
         throw sendError;
     }
+    // Cleanup временных файлов делает штатный auto-cleanup бота (FILE_LIFETIME).
+    // Если форвард в shared volume уже произошёл — копии в /data/ingest сохранятся.
 }
 
-async function handleSingleImage(ctx, result, validation, userId, loadingMsg, messages) {
+async function handleSingleImage(ctx, result, validation, userId, loadingMsg, messages, forwardItems) {
     log('info', 'Sending single image to user', userId);
 
     let imagePath;
@@ -242,6 +267,10 @@ async function handleSingleImage(ctx, result, validation, userId, loadingMsg, me
         Input.fromLocalFile(imagePath),
         { caption: isAdmin ? undefined : messages.IMAGE_DOWNLOADED }
     );
+
+    if (Array.isArray(forwardItems) && fs.existsSync(imagePath)) {
+        forwardItems.push({ path: imagePath, kind: 'photo' });
+    }
 }
 
 async function editMessage(ctx, message, text) {
@@ -252,9 +281,7 @@ async function editMessage(ctx, message, text) {
             null,
             text
         );
-    } catch (e) {
-        // Игнорируем ошибки редактирования
-    }
+    } catch (e) { /* ignore */ }
 }
 
 module.exports = { handleUrl };

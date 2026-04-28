@@ -17,6 +17,7 @@ const { handleBotError } = require('./src/handlers/error');
 const { initScheduler, sendManualReport, sendUsersList } = require('./src/services/scheduler');
 const { trackUser } = require('./src/utils/analytics');
 const { SocksProxyAgent } = require('socks-proxy-agent');
+const { register: registerForwardCallback } = require('./src/handlers/forwardCallback');
 
 // Прокси для Telegram API (обязательно для серверов в РФ)
 const botOptions = { handlerTimeout: 15 * 60 * 1000 };
@@ -30,6 +31,7 @@ if (config.PROXY_HOST && config.PROXY_PORT) {
 }
 
 const bot = new Telegraf(config.BOT_TOKEN, botOptions);
+registerForwardCallback(bot);
 
 
 // ============================================
