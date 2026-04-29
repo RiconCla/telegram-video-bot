@@ -1,0 +1,33 @@
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      AUTOPOSTER_URL: ${AUTOPOSTER_URL}
+      INGEST_SECRET: ${INGEST_SECRET}
+      FORWARD_USER_ID: ${FORWARD_USER_ID}
+      SHARED_INGEST_DIR: ${SHARED_INGEST_DIR}
+      REQUIRED_CHANNEL: ${REQUIRED_CHANNEL}
+      CHECK_SUBSCRIPTION: ${CHECK_SUBSCRIPTION}
+      PROXY_HOST: ${PROXY_HOST}
+      PROXY_PORT: ${PROXY_PORT}
+      ADMIN_ID: ${ADMIN_ID}
+      REPORT_FREQUENCY: ${REPORT_FREQUENCY}
+      REPORT_TIME: ${REPORT_TIME}
+      REPORT_TIMEZONE: ${REPORT_TIMEZONE}
+      SUBSCRIPTION_REMINDER_DAYS: ${SUBSCRIPTION_REMINDER_DAYS}
+    volumes:
+      - ingest:/data/ingest
+    networks:
+      - autoposter_net
+
+volumes:
+  ingest:
+    name: bots-autoposter-kpxqbs_ingest
+    external: true
+
+networks:
+  autoposter_net:
+    name: bots-autoposter-kpxqbs_default
+    external: true
