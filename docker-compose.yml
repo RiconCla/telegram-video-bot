@@ -4,10 +4,6 @@ services:
     restart: unless-stopped
     environment:
       BOT_TOKEN: ${BOT_TOKEN}
-      AUTOPOSTER_URL: ${AUTOPOSTER_URL}
-      INGEST_SECRET: ${INGEST_SECRET}
-      FORWARD_USER_ID: ${FORWARD_USER_ID}
-      SHARED_INGEST_DIR: ${SHARED_INGEST_DIR}
       REQUIRED_CHANNEL: ${REQUIRED_CHANNEL}
       CHECK_SUBSCRIPTION: ${CHECK_SUBSCRIPTION}
       PROXY_HOST: ${PROXY_HOST}
@@ -17,14 +13,22 @@ services:
       REPORT_TIME: ${REPORT_TIME}
       REPORT_TIMEZONE: ${REPORT_TIMEZONE}
       SUBSCRIPTION_REMINDER_DAYS: ${SUBSCRIPTION_REMINDER_DAYS}
+      AUTOPOSTER_URL: ${AUTOPOSTER_URL}
+      INGEST_SECRET: ${INGEST_SECRET}
+      FORWARD_USER_ID: ${FORWARD_USER_ID}
+      SHARED_INGEST_DIR: ${SHARED_INGEST_DIR}
     volumes:
       - ingest:/data/ingest
+      - bot_data:/app/data
     networks:
       - autoposter_net
 
 volumes:
   ingest:
     name: bots-autoposter-kpxqbs_ingest
+    external: true
+  bot_data:
+    name: telegram-bot-data
     external: true
 
 networks:
