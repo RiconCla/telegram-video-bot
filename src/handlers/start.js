@@ -159,6 +159,12 @@ async function handleCheckSubscription(ctx) {
     setUserActive(userId);
     log('success', 'Subscription verified successfully', userId);
 
+    try {
+        await ctx.deleteMessage();
+    } catch (e) {
+        log('warning', `Failed to delete subscription prompt: ${e.message}`, userId);
+    }
+
     await ctx.reply(messages.BOT_ACTIVATED, Markup.removeKeyboard());
 }
 

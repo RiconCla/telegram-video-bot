@@ -30,7 +30,12 @@
       "Bash(git -C C:/Users/Artem/Desktop/bot/telegram-video-bot status --short)",
       "Bash(git -C C:/Users/Artem/Desktop/bot/telegram-video-bot log --oneline -10)",
       "Bash(git -C C:/Users/Artem/Desktop/bot/telegram-video-bot log origin/main..HEAD --oneline)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(cp bot-fork/src/services/forwardQueue.js src/services/forwardQueue.js)",
+      "Bash(cp bot-fork/src/services/forwarder.js src/services/forwarder.js)",
+      "Bash(cp bot-fork/src/handlers/forwardCallback.js src/handlers/forwardCallback.js)",
+      "Bash(cp bot-fork/src/handlers/url.js src/handlers/url.js)",
+      "Bash(cp bot-fork/config/config.js config/config.js)"
     ]
   }
 }
