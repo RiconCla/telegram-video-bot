@@ -5,8 +5,12 @@ const { validateUrl } = require('../middleware/validation');
 const { downloadTiktok } = require('../services/tiktok');
 const { downloadInstagram } = require('../services/instagram');
 const { downloadMediaFile } = require('../services/downloader');
-const { getLocale, hasNoAskLang } = require('../utils/i18n');
-const { checkSubscription } = require('../middleware/subscription');
+const { getLocale, hasNoAskLang, getUserLanguage } = require('../utils/i18n');
+const {
+    checkSubscription,
+    buildSubscriptionKeyboard,
+    pickRequiredText
+} = require('../middleware/subscription');
 const config = require('../../config/config');
 const fs = require('fs');
 const { trackUser } = require('../utils/analytics');
@@ -32,16 +36,13 @@ async function handleUrl(ctx, isActive) {
         return;
     }
 
-    const isSubscribed = await checkSubscription(ctx);
-    if (!isSubscribed) {
-        log('warning', 'User not subscribed to required channel', userId);
-        markPending(userId, require('../utils/i18n').getUserLanguage(userId));
+    const { ok, missing } = await checkSubscription(ctx);
+    if (!ok) {
+        log('warning', 'User not subscribed to required channel(s)', userId);
+        markPending(userId, getUserLanguage(userId));
         await ctx.reply(
-            messages.SUBSCRIPTION_REQUIRED,
-            Markup.inlineKeyboard([
-                [Markup.button.url(messages.SUBSCRIBE_BUTTON, `https://t.me/${config.REQUIRED_CHANNEL.replace('@', '')}`)],
-                [Markup.button.callback(messages.CHECK_SUBSCRIPTION_BUTTON, 'check_subscription')]
-            ])
+            pickRequiredText(messages, missing),
+            buildSubscriptionKeyboard(messages, missing)
         );
         return;
     }

@@ -1,10 +1,21 @@
 const { Markup } = require('telegraf');
 const { log } = require('../utils/logger');
-const { checkSubscription } = require('../middleware/subscription');
-const { getLocale, setLanguage, getUserLanguage, isUserActive, setUserActive } = require('../utils/i18n');
+const {
+    checkSubscription,
+    buildSubscriptionKeyboard,
+    pickRequiredText,
+    pickFailedText
+} = require('../middleware/subscription');
+const {
+    getLocale,
+    setLanguage,
+    getUserLanguage,
+    isUserActive,
+    setUserActive,
+    clearUserActive
+} = require('../utils/i18n');
 const { markPending, removePending } = require('../utils/pendingSubscriptions');
 const en = require('../locales/en');
-const config = require('../../config/config');
 
 // ─────────────────────────────────────────────
 // /start — всегда показывает выбор языка
@@ -52,16 +63,13 @@ async function handleLanguageSelectStart(ctx) {
     // Новый пользователь — проверка подписки (без промежуточной кнопки «Запуск»)
     await ctx.editMessageText(messages.LANGUAGE_SELECTED);
 
-    const isSubscribed = await checkSubscription(ctx);
-    if (!isSubscribed) {
-        log('warning', 'User not subscribed to required channel', userId);
+    const { ok, missing } = await checkSubscription(ctx);
+    if (!ok) {
+        log('warning', 'User not subscribed to required channel(s)', userId);
         markPending(userId, lang);
         await ctx.reply(
-            messages.SUBSCRIPTION_REQUIRED,
-            Markup.inlineKeyboard([
-                [Markup.button.url(messages.SUBSCRIBE_BUTTON, `https://t.me/${config.REQUIRED_CHANNEL.replace('@', '')}`)],
-                [Markup.button.callback(messages.CHECK_SUBSCRIPTION_BUTTON, 'check_subscription')]
-            ])
+            pickRequiredText(messages, missing),
+            buildSubscriptionKeyboard(messages, missing)
         );
         return;
     }
@@ -101,6 +109,22 @@ async function handleLanguageSelect(ctx) {
         }
     }
 
+    // При переключении на ru — проверяем подписку с учётом нового языка.
+    // Если 2-й канал требуется и не подписан — блокируем как при первом старте.
+    if (lang === 'ru') {
+        const { ok, missing } = await checkSubscription(ctx);
+        if (!ok) {
+            log('warning', 'User switched to ru but not subscribed to required channel(s)', userId);
+            clearUserActive(userId);
+            markPending(userId, 'ru');
+            await ctx.reply(
+                pickRequiredText(messages, missing),
+                buildSubscriptionKeyboard(messages, missing)
+            );
+            return;
+        }
+    }
+
     await ctx.reply(messages.SEND_NEW_LINK);
 }
 
@@ -114,17 +138,14 @@ async function handleLaunchButton(ctx) {
 
     log('info', 'User clicked launch button (legacy)', userId);
 
-    const isSubscribed = await checkSubscription(ctx);
+    const { ok, missing } = await checkSubscription(ctx);
 
-    if (!isSubscribed) {
-        log('warning', 'User not subscribed to required channel', userId);
+    if (!ok) {
+        log('warning', 'User not subscribed to required channel(s)', userId);
         markPending(userId, getUserLanguage(userId));
         await ctx.reply(
-            messages.SUBSCRIPTION_REQUIRED,
-            Markup.inlineKeyboard([
-                [Markup.button.url(messages.SUBSCRIBE_BUTTON, `https://t.me/${config.REQUIRED_CHANNEL.replace('@', '')}`)],
-                [Markup.button.callback(messages.CHECK_SUBSCRIPTION_BUTTON, 'check_subscription')]
-            ])
+            pickRequiredText(messages, missing),
+            buildSubscriptionKeyboard(messages, missing)
         );
         return;
     }
@@ -146,12 +167,15 @@ async function handleCheckSubscription(ctx) {
     await ctx.answerCbQuery();
     log('info', 'User clicked "I subscribed" button', userId);
 
-    const isSubscribed = await checkSubscription(ctx);
+    const { ok, missing } = await checkSubscription(ctx);
 
-    if (!isSubscribed) {
+    if (!ok) {
         log('warning', 'Subscription verification failed', userId);
         markPending(userId, getUserLanguage(userId));
-        await ctx.reply(messages.SUBSCRIPTION_FAILED);
+        await ctx.reply(
+            pickFailedText(messages, missing),
+            buildSubscriptionKeyboard(messages, missing)
+        );
         return;
     }
 

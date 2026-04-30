@@ -5,6 +5,7 @@ module.exports = {
     // Telegram
     BOT_TOKEN: process.env.BOT_TOKEN,
     REQUIRED_CHANNEL: process.env.REQUIRED_CHANNEL,
+    REQUIRED_CHANNEL_2: process.env.REQUIRED_CHANNEL_2 || null,
     CHECK_SUBSCRIPTION: process.env.CHECK_SUBSCRIPTION === 'true',
 
     // Proxy (Shadowsocks/SOCKS5 для Telegram API)

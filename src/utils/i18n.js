@@ -109,6 +109,12 @@ function setUserActive(userId) {
     saveToFile();
 }
 
+function clearUserActive(userId) {
+    if (userActive.delete(String(userId))) {
+        saveToFile();
+    }
+}
+
 module.exports = {
     getLocale,
     setLanguage,
@@ -116,5 +122,6 @@ module.exports = {
     hasNoAskLang,
     setNoAskLang,
     isUserActive,
-    setUserActive
+    setUserActive,
+    clearUserActive
 };

@@ -3,39 +3,17 @@ const config = require('../../config/config');
 const { log } = require('../utils/logger');
 const { getStats, resetStats, getAllUsersList } = require('../utils/analytics');
 const { getPendingUsers, removePending, markPending } = require('../utils/pendingSubscriptions');
-const subscriptionCache = require('../utils/subscriptionCache');
-const { Markup } = require('telegraf');
+const {
+    checkSubscriptionForLang,
+    checkChannelSubscription,
+    buildSubscriptionKeyboard,
+    pickReminderText
+} = require('../middleware/subscription');
 
 let bot = null;
 
 function escapeMarkdown(text) {
     return String(text).replace(/[_*`\[]/g, '\\$&');
-}
-
-// Проверка подписки пользователя по userId (без ctx)
-async function checkUserSubscription(userId, telegram) {
-    const tg = telegram || (bot && bot.telegram);
-    if (!config.CHECK_SUBSCRIPTION || !tg) return null;
-
-    if (subscriptionCache.isInvalid(userId)) return null;
-
-    const cached = subscriptionCache.get(userId);
-    if (cached !== undefined) return cached;
-
-    try {
-        const member = await tg.getChatMember(config.REQUIRED_CHANNEL, userId);
-        const result = ['creator', 'administrator', 'member'].includes(member.status);
-        subscriptionCache.set(userId, result);
-        return result;
-    } catch (error) {
-        if (error.message && error.message.includes('PARTICIPANT_ID_INVALID')) {
-            subscriptionCache.markInvalid(userId);
-            log('warning', `User ${userId} marked as invalid (PARTICIPANT_ID_INVALID); future subscription checks skipped`);
-            return null;
-        }
-        log('error', `Subscription check error for user ${userId}: ${error.message}`);
-        return null;
-    }
 }
 
 // Форматирование отчёта
@@ -56,14 +34,14 @@ async function formatReport(stats, telegram) {
     }
 
     // Параллельная проверка подписок: пул из 5 воркеров.
-    // Ограничение 5 безопасно для Bot API (лимит ~30 req/s); кеш + invalid-list дополнительно срезают трафик.
+    // В отчёте отслеживаем только основной канал (REQUIRED_CHANNEL), независимо от языка юзера.
     const subscriptionStatuses = new Map();
-    if (config.CHECK_SUBSCRIPTION && userList.length > 0) {
+    if (config.CHECK_SUBSCRIPTION && config.REQUIRED_CHANNEL && userList.length > 0) {
         const queue = [...userList];
         const worker = async () => {
             while (queue.length) {
                 const user = queue.shift();
-                const subscribed = await checkUserSubscription(user.userId, telegram);
+                const subscribed = await checkChannelSubscription(telegram, user.userId, config.REQUIRED_CHANNEL);
                 subscriptionStatuses.set(user.userId, subscribed);
             }
         };
@@ -118,25 +96,23 @@ async function sendSubscriptionReminders() {
     for (const { userId, lastReminder, lang } of pendingUsers) {
         if (now - lastReminder < intervalMs) continue;
 
-        // Проверяем, может пользователь уже подписался
-        const subscribed = await checkUserSubscription(userId);
-        if (subscribed) {
+        const effectiveLang = lang || 'en';
+
+        // Проверяем, может пользователь уже подписался — с учётом его языка
+        const { ok, missing } = await checkSubscriptionForLang(bot.telegram, userId, effectiveLang);
+        if (ok) {
             removePending(userId);
             log('info', `User subscribed since last check, removed from pending`, userId);
             continue;
         }
 
-        const locale = lang === 'ru' ? require('../locales/ru') : require('../locales/en');
+        const locale = effectiveLang === 'ru' ? require('../locales/ru') : require('../locales/en');
+        const keyboard = buildSubscriptionKeyboard(locale, missing);
         try {
-            await bot.telegram.sendMessage(userId, locale.SUBSCRIPTION_REMINDER, {
-                reply_markup: {
-                    inline_keyboard: [
-                        [{ text: locale.SUBSCRIBE_BUTTON, url: `https://t.me/${config.REQUIRED_CHANNEL.replace('@', '')}` }],
-                        [{ text: locale.CHECK_SUBSCRIPTION_BUTTON, callback_data: 'check_subscription' }]
-                    ]
-                }
+            await bot.telegram.sendMessage(userId, pickReminderText(locale, missing), {
+                reply_markup: keyboard.reply_markup
             });
-            markPending(userId, lang); // обновляем lastReminder
+            markPending(userId, effectiveLang); // обновляем lastReminder
             sent++;
             log('info', `Subscription reminder sent`, userId);
         } catch (e) {

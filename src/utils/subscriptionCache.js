@@ -2,9 +2,13 @@ const fs = require('fs');
 const path = require('path');
 const { log } = require('./logger');
 
-// Кеш подписок: userId -> { subscribed: boolean, cachedAt: number }
+// Кеш подписок: ключ "${userId}:${channelId}" -> { subscribed: boolean, cachedAt: number }
 const cache = new Map();
 const TTL = 12 * 60 * 60 * 1000; // 12 часов
+
+function cacheKey(userId, channelId) {
+    return `${String(userId)}:${String(channelId)}`;
+}
 
 // Перманентно невалидные пользователи (PARTICIPANT_ID_INVALID и т.п.) — не дёргаем API
 const INVALID_FILE = path.resolve(__dirname, '../../data/invalid-subscription-users.json');
@@ -34,16 +38,16 @@ function saveInvalid() {
     }, 1000);
 }
 
-function get(userId) {
-    const entry = cache.get(String(userId));
+function get(userId, channelId) {
+    const entry = cache.get(cacheKey(userId, channelId));
     if (entry && (Date.now() - entry.cachedAt) < TTL) {
         return entry.subscribed;
     }
     return undefined;
 }
 
-function set(userId, subscribed) {
-    cache.set(String(userId), { subscribed, cachedAt: Date.now() });
+function set(userId, channelId, subscribed) {
+    cache.set(cacheKey(userId, channelId), { subscribed, cachedAt: Date.now() });
 }
 
 function isInvalid(userId) {

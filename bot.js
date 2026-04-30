@@ -127,6 +127,7 @@ bot.launch({ dropPendingUpdates: true }, () => {
     console.log(`🔐 Token: ${config.BOT_TOKEN ? '✅ Loaded' : '❌ Missing'}`)
     console.log(`👤 Admin ID: ${config.ADMIN_ID ? `"${config.ADMIN_ID}"` : '❌ Not set'}`);
     console.log(`📢 Required channel: ${config.REQUIRED_CHANNEL || 'Not set'}`);
+    console.log(`📢 Required channel #2 (RU): ${config.REQUIRED_CHANNEL_2 || '(disabled)'}`);
     console.log(`✓  Subscription check: ${config.CHECK_SUBSCRIPTION ? '🟢 ENABLED' : '🔴 DISABLED'}`);
     console.log(`⏱  Rate limit: ${config.RATE_LIMIT / 1000} seconds`);
     console.log(`📁 Logs directory: ${config.LOGS_DIR}`);
