@@ -15,6 +15,7 @@ const {
     clearUserActive
 } = require('../utils/i18n');
 const { markPending, removePending } = require('../utils/pendingSubscriptions');
+const subscriptionCache = require('../utils/subscriptionCache');
 const en = require('../locales/en');
 
 // ─────────────────────────────────────────────
@@ -167,6 +168,7 @@ async function handleCheckSubscription(ctx) {
     await ctx.answerCbQuery();
     log('info', 'User clicked "I subscribed" button', userId);
 
+    subscriptionCache.invalidate(userId);
     const { ok, missing } = await checkSubscription(ctx);
 
     if (!ok) {

@@ -50,6 +50,13 @@ function set(userId, channelId, subscribed) {
     cache.set(cacheKey(userId, channelId), { subscribed, cachedAt: Date.now() });
 }
 
+function invalidate(userId) {
+    const prefix = `${String(userId)}:`;
+    for (const key of cache.keys()) {
+        if (key.startsWith(prefix)) cache.delete(key);
+    }
+}
+
 function isInvalid(userId) {
     return invalidUsers.has(String(userId));
 }
@@ -62,4 +69,4 @@ function markInvalid(userId) {
     }
 }
 
-module.exports = { get, set, isInvalid, markInvalid };
+module.exports = { get, set, invalidate, isInvalid, markInvalid };
