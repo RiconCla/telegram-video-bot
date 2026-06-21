@@ -127,6 +127,15 @@ async function handleVideo(ctx, result, userId, loadingMsg, messages, forwardIte
         fs.unlinkSync(videoPath);
     }
 
+    // Даже после сжатия слишком большое (очень длинное видео) — лимит Telegram-бота 50MB
+    if (fs.existsSync(finalPath) && fs.statSync(finalPath).size > 49.5 * 1024 * 1024) {
+        log('warning', 'Video still exceeds Telegram 50MB limit after compression', userId);
+        await editMessage(ctx, loadingMsg, '❌');
+        await ctx.reply(messages.VIDEO_TOO_LARGE);
+        if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
+        return;
+    }
+
     await editMessage(ctx, loadingMsg, messages.SENDING_VIDEO);
     const startTime = Date.now();
     const isAdmin = String(userId) === String(config.ADMIN_ID);
@@ -269,6 +278,13 @@ async function handleMixed(ctx, result, userId, loadingMsg, messages, forwardIte
                 const finalPath = await compressVideo(videoPath, userId);
                 if (finalPath !== videoPath && fs.existsSync(videoPath)) {
                     fs.unlinkSync(videoPath);
+                }
+
+                // Слишком большое после сжатия — пропускаем этот элемент карусели
+                if (fs.existsSync(finalPath) && fs.statSync(finalPath).size > 49.5 * 1024 * 1024) {
+                    log('warning', `Mixed item ${i} exceeds 50MB after compression — skipped`, userId);
+                    if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
+                    continue;
                 }
 
                 const videoOpts = { supports_streaming: true };

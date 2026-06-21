@@ -95,7 +95,7 @@ async function compressVideo(inputPath, userId) {
     if (duration > 0) {
         const targetTotalKbps = (TARGET_BYTES * 8) / 1000 / duration; // kbit/s
         let videoKbps = Math.floor(targetTotalKbps - audioKbps);
-        if (videoKbps < 150) videoKbps = 150; // нижний предел качества
+        if (videoKbps < 90) videoKbps = 90; // нижний предел качества (очень длинные видео)
         rateArgs = [
             '-b:v', `${videoKbps}k`,
             '-maxrate', `${Math.floor(videoKbps * 1.45)}k`,

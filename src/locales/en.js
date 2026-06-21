@@ -74,6 +74,10 @@ module.exports = {
 
     UNAVAILABLE_ERROR: '❌ The content is unavailable or has been removed.',
 
+    VIDEO_TOO_LARGE:
+        '❌ The video is too long — even after compression it exceeds Telegram\'s 50 MB limit. ' +
+        'Telegram bots can\'t send files larger than 50 MB.',
+
     PROCESSING_ERROR: '❌ An error occurred while processing the request. Please try again.',
 
     UNEXPECTED_ERROR: '❌ An unexpected error occurred. Try again later or contact the administrator.',
