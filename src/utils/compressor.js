@@ -5,7 +5,8 @@ const path = require('path');
 const { log } = require('./logger');
 
 const execFileAsync = promisify(execFile);
-const MAX_SIZE = 49 * 1024 * 1024; // 49 MB с запасом
+const MAX_SIZE = 49 * 1024 * 1024; // 49 MB — порог, выше которого сжимаем
+const TARGET_BYTES = 45 * 1024 * 1024; // целевой размер сжатого видео (запас под лимит Telegram 50MB)
 
 // Используем локальные бинарники если есть, иначе глобальные
 const projectRoot = path.join(__dirname, '..', '..');
@@ -81,13 +82,40 @@ async function compressVideo(inputPath, userId) {
     // выход всегда отличается от входа (ffmpeg не умеет писать поверх входного файла).
     const outputPath = inputPath.replace(/\.[^.\\/]+$/, '') + '_compressed.mp4';
 
+    // Считаем целевой видео-битрейт от длительности, чтобы ГАРАНТИРОВАННО влезть
+    // под лимит Telegram-бота (50MB). Целимся в TARGET_BYTES с запасом.
+    let duration = 0;
+    try {
+        const meta = await getVideoMeta(inputPath);
+        if (meta && meta.duration) duration = meta.duration;
+    } catch (e) { /* ниже фоллбек на CRF */ }
+
+    const audioKbps = 128;
+    let rateArgs;
+    if (duration > 0) {
+        const targetTotalKbps = (TARGET_BYTES * 8) / 1000 / duration; // kbit/s
+        let videoKbps = Math.floor(targetTotalKbps - audioKbps);
+        if (videoKbps < 150) videoKbps = 150; // нижний предел качества
+        rateArgs = [
+            '-b:v', `${videoKbps}k`,
+            '-maxrate', `${Math.floor(videoKbps * 1.45)}k`,
+            '-bufsize', `${videoKbps * 2}k`,
+        ];
+        log('info', `Target video bitrate: ${videoKbps}k (duration ${duration}s)`, userId);
+    } else {
+        rateArgs = ['-crf', '30']; // длительность неизвестна — фоллбек
+    }
+
     return new Promise((resolve, reject) => {
         execFile(FFMPEG, [
             '-i', inputPath,
+            // даунскейл до 1080 по высоте (4K/ультраширокие → меньше нужного битрейта)
+            '-vf', "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
             '-vcodec', 'libx264',
-            '-crf', '30',
+            ...rateArgs,
             '-preset', 'fast',
             '-acodec', 'aac',
+            '-b:a', `${audioKbps}k`,
             ...APPLE_COMPAT_ARGS,
             '-y',
             outputPath
