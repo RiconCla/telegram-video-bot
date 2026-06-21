@@ -75,14 +75,16 @@ async function downloadViaYtdlp(url, userId) {
     const beforeTime = Date.now();
     const outputTemplate = path.join(userDir, '%(id)s.%(ext)s');
 
+    // YouTube бывает 4K/очень тяжёлый → кап 720p. Остальные площадки обычно мелкие —
+    // качаем до 1080p, а под лимит Telegram (50MB) при необходимости ужмёт compressVideo.
+    const maxRes = /youtube\.com|youtu\.be/i.test(url) ? '720' : '1080';
     const ytDlpArgs = [
         '--output', outputTemplate,
         '--no-warnings',
         '--force-overwrites',
-        // Сначала предпочесть h264 (без транскода для Telegram, меньше размер),
-        // затем ≤720p, mp4/m4a, aac. 720p почти всегда влезает в 50MB без сжатия —
-        // быстрее и легче серверу. -S только СОРТИРУЕТ и не ломает фото-посты.
-        '-S', 'vcodec:h264,res:720,ext:mp4:m4a,acodec:aac',
+        // h264 в приоритете (без транскода для Telegram, играется везде), затем кап
+        // разрешения, mp4/m4a, aac. -S только СОРТИРУЕТ и не ломает фото-посты.
+        '-S', `vcodec:h264,res:${maxRes},ext:mp4:m4a,acodec:aac`,
         '--merge-output-format', 'mp4',
     ];
     if (config.DL_PROXY) {
