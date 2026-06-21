@@ -39,7 +39,10 @@ services:
   ss-http:
     image: ghcr.io/shadowsocks/sslocal-rust:latest
     restart: unless-stopped
+    # entrypoint образа делает `exec "$@"`, поэтому первым аргументом обязателен
+    # бинарник sslocal (иначе `exec --protocol …` → "illegal option --").
     command:
+      - sslocal
       - --protocol
       - http
       - -b
