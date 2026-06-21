@@ -38,9 +38,11 @@ async function downloadViaCobalt(url, userId) {
                 downloadMode: 'auto',
                 filenameStyle: 'basic'
             },
-            { headers, timeout: 60000 }
+            // Не бросаем на 4xx/5xx — cobalt отдаёт причину в JSON-теле даже при ошибке
+            { headers, timeout: 60000, validateStatus: () => true }
         );
 
+        const httpStatus = response.status;
         const data = response.data || {};
         const status = data.status;
 
@@ -84,7 +86,8 @@ async function downloadViaCobalt(url, userId) {
 
         if (status === 'error') {
             const code = data.error && data.error.code;
-            log('error', `cobalt error: ${code || 'unknown'}`, userId);
+            const ctx = data.error && data.error.context ? ` ctx=${JSON.stringify(data.error.context)}` : '';
+            log('error', `cobalt error (HTTP ${httpStatus}): ${code || 'unknown'}${ctx}`, userId);
             return { success: false };
         }
 
@@ -94,11 +97,15 @@ async function downloadViaCobalt(url, userId) {
             return { success: false };
         }
 
-        log('warning', `cobalt: unexpected status "${status}"`, userId);
+        const dump = typeof data === 'string' ? data.slice(0, 300) : JSON.stringify(data).slice(0, 300);
+        log('warning', `cobalt: unexpected response (HTTP ${httpStatus}, status="${status}"): ${dump}`, userId);
         return { success: false };
 
     } catch (error) {
-        const detail = error.response ? `HTTP ${error.response.status}` : error.message;
+        const body = error.response && error.response.data
+            ? ` body=${typeof error.response.data === 'string' ? error.response.data.slice(0, 300) : JSON.stringify(error.response.data).slice(0, 300)}`
+            : '';
+        const detail = error.response ? `HTTP ${error.response.status}${body}` : error.message;
         log('error', `cobalt download error: ${detail}`, userId);
         return { success: false };
     }
