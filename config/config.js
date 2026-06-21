@@ -24,8 +24,11 @@ module.exports = {
     LOGS_DIR: path.join(__dirname, '..', 'logs'),
     TEMP_DIR: path.join(__dirname, '..', 'temp'),
 
-    // APIs
-    TIKTOK_API_URL: 'https://tikwm.com/api/',
+    // ── Cobalt (self-hosted загрузчик) ───────────────────
+    // Внутренний адрес cobalt по docker-сети. По умолчанию http://cobalt:9000/
+    COBALT_API_URL: process.env.COBALT_API_URL || 'http://cobalt:9000/',
+    // Необязательный ключ, если у cobalt включена авторизация (Authorization: Api-Key)
+    COBALT_API_KEY: process.env.COBALT_API_KEY || null,
 
     // Статистика и отчёты
     ADMIN_ID: (process.env.ADMIN_ID || '').trim() || null,

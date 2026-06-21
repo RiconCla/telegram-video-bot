@@ -1,9 +1,8 @@
 FROM node:18-alpine
 
-# Устанавливаем ffmpeg и yt-dlp
-RUN apk add --no-cache ffmpeg python3 curl
-RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-RUN chmod a+rx /usr/local/bin/yt-dlp
+# ffmpeg нужен для compressVideo/getVideoMeta (метаданные + сжатие видео >49MB).
+# yt-dlp/python больше не нужны — вся загрузка идёт через cobalt.
+RUN apk add --no-cache ffmpeg
 
 WORKDIR /app
 COPY package*.json ./

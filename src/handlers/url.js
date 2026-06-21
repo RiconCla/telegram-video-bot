@@ -2,8 +2,7 @@ const { Input } = require('telegraf');
 const { Markup } = require('telegraf');
 const { log } = require('../utils/logger');
 const { validateUrl } = require('../middleware/validation');
-const { downloadTiktok } = require('../services/tiktok');
-const { downloadInstagram } = require('../services/instagram');
+const { downloadViaCobalt } = require('../services/cobalt');
 const { downloadMediaFile } = require('../services/downloader');
 const { getLocale, hasNoAskLang, getUserLanguage } = require('../utils/i18n');
 const {
@@ -14,7 +13,7 @@ const {
 const config = require('../../config/config');
 const fs = require('fs');
 const { trackUser } = require('../utils/analytics');
-const { compressVideo, ensureCompatible, getVideoMeta } = require('../utils/compressor');
+const { compressVideo, getVideoMeta } = require('../utils/compressor');
 const { markPending } = require('../utils/pendingSubscriptions');
 // ── autoposter integration ──
 const { prepareBatch, isEnabled: isForwardEnabled } = require('../services/forwardQueue');
@@ -50,7 +49,7 @@ async function handleUrl(ctx, isActive) {
     log('info', `Received URL: ${messageText}`, userId);
 
     const validation = validateUrl(messageText);
-    if (!validation.isTiktok && !validation.isInstagram) {
+    if (!validation.isSupported) {
         log('warning', 'Invalid URL received', userId);
         await ctx.reply(messages.INVALID_URL);
         return;
@@ -60,21 +59,18 @@ async function handleUrl(ctx, isActive) {
     log('info', 'Download started', userId);
 
     try {
-        let result;
-        if (validation.isTiktok) {
-            result = await downloadTiktok(messageText, userId);
-        } else if (validation.isInstagram) {
-            result = await downloadInstagram(messageText, userId);
-        }
+        const result = await downloadViaCobalt(messageText, userId);
 
         if (result.success) {
             // forwardItems заполняется handle*-функциями — список локальных файлов
             const forwardItems = [];
 
             if (result.type === 'video') {
-                await handleVideo(ctx, result, validation, userId, loadingMsg, messages, forwardItems);
+                await handleVideo(ctx, result, userId, loadingMsg, messages, forwardItems);
+            } else if (result.type === 'mixed') {
+                await handleMixed(ctx, result, userId, loadingMsg, messages, forwardItems);
             } else if (result.type === 'image' || Array.isArray(result.url)) {
-                await handleImages(ctx, result, validation, userId, loadingMsg, messages, forwardItems);
+                await handleImages(ctx, result, userId, loadingMsg, messages, forwardItems);
             }
 
             log('success', 'Media sent successfully', userId);
@@ -119,22 +115,13 @@ async function handleUrl(ctx, isActive) {
     }
 }
 
-async function handleVideo(ctx, result, validation, userId, loadingMsg, messages, forwardItems) {
+async function handleVideo(ctx, result, userId, loadingMsg, messages, forwardItems) {
     log('info', 'Sending video to user', userId);
 
-    let finalPath;
-    if (validation.isInstagram) {
-        const compatPath = await ensureCompatible(result.url, userId);
-        finalPath = await compressVideo(compatPath, userId);
-        if (finalPath !== compatPath && fs.existsSync(compatPath)) {
-            fs.unlinkSync(compatPath);
-        }
-    } else {
-        const videoPath = await downloadMediaFile(result.url, userId, 'video.mp4');
-        finalPath = await compressVideo(videoPath, userId);
-        if (finalPath !== videoPath && fs.existsSync(videoPath)) {
-            fs.unlinkSync(videoPath);
-        }
+    const videoPath = await downloadMediaFile(result.url, userId, 'video.mp4');
+    const finalPath = await compressVideo(videoPath, userId);
+    if (finalPath !== videoPath && fs.existsSync(videoPath)) {
+        fs.unlinkSync(videoPath);
     }
 
     await editMessage(ctx, loadingMsg, messages.SENDING_VIDEO);
@@ -161,15 +148,15 @@ async function handleVideo(ctx, result, validation, userId, loadingMsg, messages
     log('success', `Video sent successfully in ${uploadTime}s`, userId);
 }
 
-async function handleImages(ctx, result, validation, userId, loadingMsg, messages, forwardItems) {
+async function handleImages(ctx, result, userId, loadingMsg, messages, forwardItems) {
     if (Array.isArray(result.url)) {
-        await handleImageCarousel(ctx, result, validation, userId, loadingMsg, messages, forwardItems);
+        await handleImageCarousel(ctx, result, userId, loadingMsg, messages, forwardItems);
     } else {
-        await handleSingleImage(ctx, result, validation, userId, loadingMsg, messages, forwardItems);
+        await handleSingleImage(ctx, result, userId, loadingMsg, messages, forwardItems);
     }
 }
 
-async function handleImageCarousel(ctx, result, validation, userId, loadingMsg, messages, forwardItems) {
+async function handleImageCarousel(ctx, result, userId, loadingMsg, messages, forwardItems) {
     const totalImages = result.url.length;
     log('info', `Sending ${totalImages} images to user as media groups`, userId);
 
@@ -193,16 +180,11 @@ async function handleImageCarousel(ctx, result, validation, userId, loadingMsg, 
             const imagePaths = [];
             for (let i = 0; i < batchItems.length; i++) {
                 try {
-                    let imagePath;
-                    if (validation.isInstagram) {
-                        imagePath = batchItems[i];
-                    } else {
-                        imagePath = await downloadMediaFile(
-                            batchItems[i],
-                            userId,
-                            `batch${batch}_image_${i}.jpg`
-                        );
-                    }
+                    const imagePath = await downloadMediaFile(
+                        batchItems[i],
+                        userId,
+                        `batch${batch}_image_${i}.jpg`
+                    );
                     imagePaths.push(imagePath);
                 } catch (downloadError) {
                     log('error', `Failed to get image ${startIndex + i}: ${downloadError.message}`, userId);
@@ -252,15 +234,10 @@ async function handleImageCarousel(ctx, result, validation, userId, loadingMsg, 
     // Если форвард в shared volume уже произошёл — копии в /data/ingest сохранятся.
 }
 
-async function handleSingleImage(ctx, result, validation, userId, loadingMsg, messages, forwardItems) {
+async function handleSingleImage(ctx, result, userId, loadingMsg, messages, forwardItems) {
     log('info', 'Sending single image to user', userId);
 
-    let imagePath;
-    if (validation.isInstagram) {
-        imagePath = result.url;
-    } else {
-        imagePath = await downloadMediaFile(result.url, userId, 'image.jpg');
-    }
+    const imagePath = await downloadMediaFile(result.url, userId, 'image.jpg');
 
     await editMessage(ctx, loadingMsg, messages.sendingImage());
     const isAdmin = String(userId) === String(config.ADMIN_ID);
@@ -271,6 +248,72 @@ async function handleSingleImage(ctx, result, validation, userId, loadingMsg, me
 
     if (Array.isArray(forwardItems) && fs.existsSync(imagePath)) {
         forwardItems.push({ path: imagePath, kind: 'photo' });
+    }
+}
+
+// Смешанная карусель (видео + фото) — например, Instagram carousel.
+// Видео отправляем по одному (replyWithVideo), фото — группами media group.
+// Один пост источника = один пост в autoposter (все элементы кладём в forwardItems).
+async function handleMixed(ctx, result, userId, loadingMsg, messages, forwardItems) {
+    const items = Array.isArray(result.items) ? result.items : [];
+    log('info', `Sending mixed carousel (${items.length} items) to user`, userId);
+
+    await editMessage(ctx, loadingMsg, messages.sendingImages(items.length));
+
+    const photoPaths = [];
+
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        try {
+            if (item.type === 'video') {
+                const videoPath = await downloadMediaFile(item.url, userId, `mixed_${i}.mp4`);
+                const finalPath = await compressVideo(videoPath, userId);
+                if (finalPath !== videoPath && fs.existsSync(videoPath)) {
+                    fs.unlinkSync(videoPath);
+                }
+
+                const videoOpts = { supports_streaming: true };
+                try {
+                    const meta = await getVideoMeta(finalPath);
+                    if (meta) {
+                        videoOpts.width = meta.width;
+                        videoOpts.height = meta.height;
+                        videoOpts.duration = meta.duration;
+                    }
+                } catch (e) {
+                    log('warning', `Could not get video metadata: ${e.message}`, userId);
+                }
+
+                await ctx.replyWithVideo(Input.fromLocalFile(finalPath), videoOpts);
+                if (Array.isArray(forwardItems) && fs.existsSync(finalPath)) {
+                    forwardItems.push({ path: finalPath, kind: 'video' });
+                }
+            } else {
+                const imagePath = await downloadMediaFile(item.url, userId, `mixed_${i}.jpg`);
+                photoPaths.push(imagePath);
+            }
+        } catch (e) {
+            log('error', `Mixed carousel item ${i} failed: ${e.message}`, userId);
+        }
+    }
+
+    // Фото отправляем группами по BATCH_SIZE (Telegram: максимум 10 в media group)
+    for (let start = 0; start < photoPaths.length; start += config.BATCH_SIZE) {
+        const group = photoPaths
+            .slice(start, start + config.BATCH_SIZE)
+            .map((p) => ({ type: 'photo', media: Input.fromLocalFile(p) }));
+
+        if (group.length === 1) {
+            await ctx.replyWithPhoto(group[0].media);
+        } else if (group.length > 1) {
+            await ctx.replyWithMediaGroup(group);
+        }
+    }
+
+    if (Array.isArray(forwardItems)) {
+        for (const p of photoPaths) {
+            if (fs.existsSync(p)) forwardItems.push({ path: p, kind: 'photo' });
+        }
     }
 }
 

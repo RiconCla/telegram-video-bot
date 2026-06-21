@@ -18,11 +18,48 @@ services:
       INGEST_SECRET: ${INGEST_SECRET}
       FORWARD_USER_ID: ${FORWARD_USER_ID}
       SHARED_INGEST_DIR: ${SHARED_INGEST_DIR}
+      # ── Cobalt ──
+      COBALT_API_URL: ${COBALT_API_URL:-http://cobalt:9000/}
+      COBALT_API_KEY: ${COBALT_API_KEY:-}
     volumes:
       - ingest:/data/ingest
       - bot_data:/app/data
     networks:
-      - autoposter_net
+      - autoposter_net   # как раньше — связь с autoposter (НЕ трогаем)
+      - cobalt_net       # внутренняя связь bot ↔ cobalt
+    depends_on:
+      - cobalt
+
+  # Self-hosted загрузчик. Ходит в соцсети через тот же SOCKS5-прокси, что и бот.
+  cobalt:
+    image: ghcr.io/imputnet/cobalt:11
+    init: true
+    read_only: true
+    restart: unless-stopped
+    environment:
+      # Внутренний адрес — бот качает tunnel-URL по docker-сети, наружу не публикуем
+      API_URL: "http://cobalt:9000/"
+      # Тот же прокси, что использует бот для соцсетей (сервер гео-блокируется в РФ)
+      API_EXTERNAL_PROXY: "socks5h://${PROXY_HOST}:${PROXY_PORT}"
+    labels:
+      - com.centurylinklabs.watchtower.scope=cobalt
+    networks:
+      - cobalt_net
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+
+  # Автообновление образа cobalt (опционально)
+  watchtower:
+    image: ghcr.io/containrrr/watchtower
+    restart: unless-stopped
+    command: --cleanup --scope cobalt --interval 900 --include-restarting
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - com.centurylinklabs.watchtower.scope=cobalt
 
 volumes:
   ingest:
@@ -36,3 +73,5 @@ networks:
   autoposter_net:
     name: bots-autoposter-kpxqbs_default
     external: true
+  cobalt_net:
+    driver: bridge

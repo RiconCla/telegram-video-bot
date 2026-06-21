@@ -1,11 +1,42 @@
-function validateUrl(url) {
-    const tiktokRegex = /(?:https?:\/\/)?(?:www\.|vm\.|vt\.)?tiktok\.com\/.+/i;
-    const instagramRegex = /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(p|reel|tv)\/[A-Za-z0-9_-]+/i;
+// Домены, которые умеет обрабатывать cobalt. Ссылка считается валидной,
+// если её host совпадает с доменом из списка или является его поддоменом.
+const SUPPORTED_DOMAINS = [
+    'tiktok.com',
+    'instagram.com',
+    'youtube.com', 'youtu.be',
+    'twitter.com', 'x.com',
+    'reddit.com', 'redd.it',
+    'vk.com', 'vkvideo.ru',
+    'facebook.com', 'fb.watch',
+    'twitch.tv',
+    'soundcloud.com',
+    'tumblr.com',
+    'pinterest.com', 'pin.it',
+    'bilibili.com',
+    'streamable.com',
+    'bsky.app',
+    'snapchat.com',
+    'loom.com'
+];
 
-    return {
-        isTiktok: tiktokRegex.test(url),
-        isInstagram: instagramRegex.test(url)
-    };
+function validateUrl(url) {
+    if (!url || typeof url !== 'string') {
+        return { isSupported: false };
+    }
+
+    let host;
+    try {
+        const normalized = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+        host = new URL(normalized).hostname.toLowerCase().replace(/^www\./, '');
+    } catch (e) {
+        return { isSupported: false };
+    }
+
+    const isSupported = SUPPORTED_DOMAINS.some(
+        (domain) => host === domain || host.endsWith(`.${domain}`)
+    );
+
+    return { isSupported };
 }
 
 module.exports = { validateUrl };

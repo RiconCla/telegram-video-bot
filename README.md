@@ -24,15 +24,10 @@ Telegram-бот для скачивания видео и изображений
 
 ## ✨ Функционал
 
-### TikTok
-- Скачивание видео (HD-качество через `tikwm.com`)
-- Скачивание слайдшоу (множественные изображения)
-- Приоритет вариантов: `play → wmplay → hdplay`
-
-### Instagram
-- Скачивание Reels (видео)
-- Скачивание постов (одиночные фото и карусели)
-- Основной путь — `yt-dlp`; embed-фоллбек, если yt-dlp не отдал файлы
+### Загрузка (через self-hosted [cobalt](https://github.com/imputnet/cobalt))
+- Единый загрузчик для всех платформ: TikTok, Instagram, YouTube, X/Twitter, Reddit, VK и др.
+- Видео, слайдшоу, карусели (фото и видео+фото), одиночные фото
+- cobalt отдаёт готовый медиа-URL, бот его скачивает; список доменов — в `src/middleware/validation.js`
 
 ### Пользовательский UX
 - Двуязычный интерфейс (RU/EN), команда `/lang` для смены
@@ -50,13 +45,12 @@ Telegram-бот для скачивания видео и изображений
 
 ### Технические детали
 - Сжатие видео через `ffmpeg` при превышении 50 МБ
-- Нормализация кодека для совместимости с iOS/macOS
 - Авто-удаление временных файлов через 10 минут
 - Лимит 15 файлов на пользователя
 - Дебаунс записи stats.json (1с) и invalid-users (1с)
 - Параллельная проверка подписок (пул из 5) при формировании отчёта
 - Кеш подписок на 12 часов
-- Поддержка SOCKS5-прокси для Telegram API и yt-dlp (для серверов в РФ)
+- Поддержка SOCKS5-прокси для Telegram API (бот) и для cobalt (доступ к соцсетям, серверы в РФ)
 
 ---
 
@@ -70,8 +64,8 @@ Telegram-бот для скачивания видео и изображений
 | Cron | node-cron 4 |
 | Proxy | socks-proxy-agent 8 |
 | Env | dotenv 16 |
-| Внешние утилиты | `yt-dlp` (Instagram), `ffmpeg`/`ffprobe` (компрессия) |
-| Внешний API | `tikwm.com` (TikTok) |
+| Внешние утилиты | `ffmpeg`/`ffprobe` (метаданные + компрессия) |
+| Загрузчик | self-hosted `cobalt` (отдельный контейнер) |
 | Process manager | PM2 (опционально) или Docker |
 
 ---
@@ -93,7 +87,7 @@ telegram-video-bot/
 │   ├── handlers/
 │   │   ├── start.js                # /start, выбор языка, кнопка активации
 │   │   ├── lang.js                 # /lang, смена языка
-│   │   ├── url.js                  # Обработка ссылок TikTok/Instagram
+│   │   ├── url.js                  # Обработка ссылок (загрузка через cobalt)
 │   │   └── error.js                # bot.catch handler
 │   ├── locales/
 │   │   ├── en.js                   # Английская локаль
@@ -101,16 +95,15 @@ telegram-video-bot/
 │   ├── middleware/
 │   │   ├── rateLimit.js            # Rate limiting (1 req/sec)
 │   │   ├── subscription.js         # Проверка подписки на канал
-│   │   └── validation.js           # Валидация URL TikTok/Instagram
+│   │   └── validation.js           # Валидация URL (allowlist доменов cobalt)
 │   ├── services/
-│   │   ├── downloader.js           # HTTP-скачивание медиа по URL (TikTok)
-│   │   ├── tiktok.js               # tikwm.com API интеграция
-│   │   ├── instagram.js            # Instagram через yt-dlp + embed-фоллбек
+│   │   ├── downloader.js           # HTTP-скачивание медиа по URL
+│   │   ├── cobalt.js               # Интеграция с cobalt API (загрузка всех платформ)
 │   │   └── scheduler.js            # Cron-отчёты, /stats, /users, admin menu
 │   └── utils/
 │       ├── logger.js               # Логирование (console + файл с ротацией 7 дней)
 │       ├── fileManager.js          # Управление временными файлами
-│       ├── compressor.js           # ffmpeg-сжатие и нормализация кодека
+│       ├── compressor.js           # ffmpeg-сжатие и метаданные видео
 │       ├── analytics.js            # Статистика пользователей (debounced persist)
 │       ├── i18n.js                 # Локали + персист языковых настроек
 │       ├── pendingSubscriptions.js # Очередь напоминаний о подписке
@@ -145,10 +138,10 @@ telegram-video-bot/
 
 - **Node.js** ≥ 18.x
 - **npm** ≥ 9.x
-- **yt-dlp** (системная утилита — обязательно для Instagram)
-- **ffmpeg** + **ffprobe** (для сжатия и нормализации видео)
+- **ffmpeg** + **ffprobe** (для сжатия и метаданных видео)
+- **cobalt** — self-hosted инстанс загрузчика (отдельный контейнер, см. `docker-compose.yml`)
+- **Docker** (рекомендуется — для Docploy/контейнерного деплоя)
 - **PM2** (опционально — для production без Docker)
-- **Docker** (опционально — для Docploy/контейнерного деплоя)
 
 ---
 
@@ -169,9 +162,11 @@ cd telegram-video-bot
 
 # либо вручную
 sudo apt-get install -y ffmpeg
-sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-sudo chmod a+rx /usr/local/bin/yt-dlp
 ```
+
+> Загрузка видео идёт через self-hosted cobalt. При деплое через Docker он поднимается
+> автоматически отдельным сервисом (см. `docker-compose.yml`). Для локального запуска без
+> Docker подними cobalt отдельно и укажи его адрес в `COBALT_API_URL`.
 
 ### 3. Установить npm-зависимости
 
@@ -202,10 +197,18 @@ CHECK_SUBSCRIPTION=true
 # ============================================
 # PROXY (для серверов в РФ)
 # ============================================
-# SOCKS5-прокси для Telegram API и yt-dlp.
+# SOCKS5-прокси: используется ботом (Telegram API) и cobalt (доступ к соцсетям).
 # Требуется отдельно поднятый ss-local (Shadowsocks/Outline).
 PROXY_HOST=127.0.0.1
 PROXY_PORT=1080
+
+# ============================================
+# COBALT (загрузчик)
+# ============================================
+# Внутренний адрес cobalt в docker-сети (по умолчанию http://cobalt:9000/)
+COBALT_API_URL=http://cobalt:9000/
+# Ключ авторизации cobalt, если включён (иначе оставить пустым)
+COBALT_API_KEY=
 
 # ============================================
 # СТАТИСТИКА И ОТЧЁТЫ
@@ -286,7 +289,7 @@ docker run -d --name telegram-video-bot \
 
 ### Docker / Docploy
 
-`Dockerfile` использует `node:18-alpine` + ставит `ffmpeg` и `yt-dlp` в образ. `.dockerignore` исключает `credit.env`, `data/`, `logs/`, `temp/`, `pics/`, `*.exe`. Для деплоя через Docploy достаточно подсунуть переменные окружения и примонтировать `data/` + `logs/` для сохранения состояния между перезапусками.
+`Dockerfile` использует `node:18-alpine` + ставит `ffmpeg` в образ (yt-dlp больше не нужен). `docker-compose.yml` поднимает два сервиса: `bot` и `cobalt` (загрузчик) на внутренней сети `cobalt_net`; сеть/volume автопостера не затрагиваются. `cobalt` ходит в соцсети через `API_EXTERNAL_PROXY` (тот же SOCKS5, что и бот). `.dockerignore` исключает `credit.env`, `data/`, `logs/`, `temp/`, `pics/`, `*.exe`. Для деплоя через Docploy достаточно подсунуть переменные окружения и примонтировать `data/` для сохранения состояния между перезапусками.
 
 ### Обновление
 
