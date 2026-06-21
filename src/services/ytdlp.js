@@ -75,7 +75,16 @@ async function downloadViaYtdlp(url, userId) {
     const beforeTime = Date.now();
     const outputTemplate = path.join(userDir, '%(id)s.%(ext)s');
 
-    const ytDlpArgs = ['--output', outputTemplate, '--no-warnings', '--force-overwrites'];
+    const ytDlpArgs = [
+        '--output', outputTemplate,
+        '--no-warnings',
+        '--force-overwrites',
+        // Предпочесть ≤1080p, готовый mp4/h264+aac (Telegram-friendly, меньше размер,
+        // меньше транскода). -S только СОРТИРУЕТ приоритет форматов и не ломает
+        // фото-посты (TikTok-слайдшоу, IG-карусели) — для них видео-форматов нет.
+        '-S', 'res:1080,ext:mp4:m4a,vcodec:h264,acodec:aac',
+        '--merge-output-format', 'mp4',
+    ];
     if (config.DL_PROXY) {
         ytDlpArgs.push('--proxy', config.DL_PROXY);
         log('info', `yt-dlp will use proxy: ${config.DL_PROXY}`, userId);

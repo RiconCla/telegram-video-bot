@@ -77,7 +77,9 @@ async function compressVideo(inputPath, userId) {
     const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
     log('info', `Video too large (${sizeMB} MB), compressing with ffmpeg...`, userId);
 
-    const outputPath = inputPath.replace(/\.mp4$/, '_compressed.mp4');
+    // Убираем любое расширение (.webm/.mkv/.mp4) и добавляем _compressed.mp4 —
+    // выход всегда отличается от входа (ffmpeg не умеет писать поверх входного файла).
+    const outputPath = inputPath.replace(/\.[^.\\/]+$/, '') + '_compressed.mp4';
 
     return new Promise((resolve, reject) => {
         execFile(FFMPEG, [
