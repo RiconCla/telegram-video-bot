@@ -16,18 +16,6 @@ const VIDEO_EXTS = /\.(mp4|mkv|webm|mov|avi|m4v)$/i;
 const localYtDlp = path.join(__dirname, '..', '..', 'yt-dlp.exe');
 const YT_DLP = fs.existsSync(localYtDlp) ? localYtDlp : 'yt-dlp';
 
-// Ошибки yt-dlp, при которых имеет смысл пробовать Instagram embed-фоллбек
-const FALLBACK_ERROR_PATTERNS = [
-    /there is no video in this post/i,
-    /no video could be found/i,
-    /empty media response/i,
-    /unable to extract shared data/i,
-    /requested format is not available/i,
-    /login required/i,
-    /rate-limit reached/i,
-    /you need to log in/i
-];
-
 function isInstagramUrl(url) {
     return /instagram\.com/i.test(url);
 }
@@ -97,15 +85,14 @@ async function downloadViaYtdlp(url, userId) {
         }
     }
 
-    // Instagram embed-фоллбек (без cookies) — для фото-постов и anti-scraping ограничений
+    // Instagram embed-фоллбек (без cookies): пробуем на любой сбой yt-dlp по IG —
+    // дёшево (один HTTP-запрос) и иногда embed-эндпоинт отдаёт то, что yt-dlp не смог.
     if (!downloadOk && isInstagramUrl(url)) {
-        const shouldTry = ytDlpStderr === '' || FALLBACK_ERROR_PATTERNS.some((p) => p.test(ytDlpStderr));
-        if (shouldTry) {
-            log('info', 'Trying Instagram embed fallback', userId);
-            const fallbackFiles = await downloadInstagramViaEmbed(url, userId, userDir);
-            if (fallbackFiles && fallbackFiles.length > 0) {
-                return buildResult(fallbackFiles, userId);
-            }
+        log('info', 'yt-dlp failed for Instagram — trying embed fallback', userId);
+        if (ytDlpStderr) log('info', `(yt-dlp error was: ${ytDlpStderr.trim().slice(0, 200)})`, userId);
+        const fallbackFiles = await downloadInstagramViaEmbed(url, userId, userDir);
+        if (fallbackFiles && fallbackFiles.length > 0) {
+            return buildResult(fallbackFiles, userId);
         }
     }
 
