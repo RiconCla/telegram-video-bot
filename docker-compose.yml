@@ -7,8 +7,10 @@ services:
       REQUIRED_CHANNEL: ${REQUIRED_CHANNEL}
       REQUIRED_CHANNEL_2: ${REQUIRED_CHANNEL_2}
       CHECK_SUBSCRIPTION: ${CHECK_SUBSCRIPTION}
-      PROXY_HOST: ${PROXY_HOST}
-      PROXY_PORT: ${PROXY_PORT}
+      # Прокси временно отключён. Чтобы вернуть — раскомментировать обе строки
+      # и API_EXTERNAL_PROXY у сервиса cobalt ниже.
+      # PROXY_HOST: ${PROXY_HOST}
+      # PROXY_PORT: ${PROXY_PORT}
       ADMIN_ID: ${ADMIN_ID}
       REPORT_FREQUENCY: ${REPORT_FREQUENCY}
       REPORT_TIME: ${REPORT_TIME}
@@ -39,8 +41,10 @@ services:
     environment:
       # Внутренний адрес — бот качает tunnel-URL по docker-сети, наружу не публикуем
       API_URL: "http://cobalt:9000/"
-      # Тот же прокси, что использует бот для соцсетей (сервер гео-блокируется в РФ)
-      API_EXTERNAL_PROXY: "socks5h://${PROXY_HOST}:${PROXY_PORT}"
+      # Прокси временно отключён — cobalt ходит в соцсети напрямую.
+      # Чтобы вернуть (сервер гео-блокируется в РФ) — раскомментировать строку ниже
+      # и PROXY_HOST/PROXY_PORT в сервисе bot выше.
+      # API_EXTERNAL_PROXY: "socks5h://${PROXY_HOST}:${PROXY_PORT}"
     labels:
       - com.centurylinklabs.watchtower.scope=cobalt
     networks:
