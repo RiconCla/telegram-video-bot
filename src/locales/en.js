@@ -65,6 +65,15 @@ module.exports = {
         '• Service temporarily unavailable\n\n' +
         '🔄 Try another link or try again later.',
 
+    RESTRICTED_ERROR:
+        '🔞 This content is restricted (age or audience limited) — the platform only serves it ' +
+        'to logged-in users. It can\'t be downloaded without signing in.',
+
+    PRIVATE_ERROR:
+        '🔒 This is a private post — only followers or the owner can access it. It can\'t be downloaded.',
+
+    UNAVAILABLE_ERROR: '❌ The content is unavailable or has been removed.',
+
     PROCESSING_ERROR: '❌ An error occurred while processing the request. Please try again.',
 
     UNEXPECTED_ERROR: '❌ An unexpected error occurred. Try again later or contact the administrator.',

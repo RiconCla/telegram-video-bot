@@ -20,6 +20,25 @@ function isInstagramUrl(url) {
     return /instagram\.com/i.test(url);
 }
 
+// Классификация ошибки yt-dlp в человекочитаемую причину для пользователя.
+// Возвращает: 'restricted' | 'private' | 'unavailable' | 'generic'
+function classifyError(stderr) {
+    const s = (stderr || '').toLowerCase();
+    if (!s) return 'generic';
+    // Возрастные/аудиторные ограничения и требование логина — порядок важен (проверяем первым)
+    if (/isn'?t available to everyone|certain audiences|age[- ]?restrict|sign in to confirm your age|confirm your age|inappropriate|nsfw|sensitive content/.test(s)
+        || /login required|requires? (?:authentication|login|you to log in)|you need to log in|log in to|rate-limited, or login|use --cookies|cookies/.test(s)) {
+        return 'restricted';
+    }
+    if (/private (?:video|account|profile|post|user)|is private|marked as private|only available to|requested user|not joined this/.test(s)) {
+        return 'private';
+    }
+    if (/unavailable|has been removed|was deleted|no longer available|content isn'?t available|does not exist|not found|404|deleted/.test(s)) {
+        return 'unavailable';
+    }
+    return 'generic';
+}
+
 async function runYtDlp(args, timeout = 120000) {
     return execFileAsync(YT_DLP, args, { timeout, maxBuffer: 10 * 1024 * 1024 });
 }
@@ -97,8 +116,9 @@ async function downloadViaYtdlp(url, userId) {
     }
 
     if (!downloadOk) {
-        log('error', 'yt-dlp download failed', userId);
-        return { success: false };
+        const reason = classifyError(ytDlpStderr);
+        log('error', `yt-dlp download failed (reason: ${reason})`, userId);
+        return { success: false, reason };
     }
 
     const newFiles = fs.readdirSync(userDir)
@@ -117,7 +137,7 @@ async function downloadViaYtdlp(url, userId) {
             }
         }
         log('error', 'yt-dlp ran but no new files found', userId);
-        return { success: false };
+        return { success: false, reason: classifyError(ytDlpStderr) };
     }
 
     return buildResult(newFiles, userId);

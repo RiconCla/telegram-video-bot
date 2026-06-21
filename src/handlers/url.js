@@ -104,8 +104,12 @@ async function handleUrl(ctx, isActive) {
 
         } else {
             await editMessage(ctx, loadingMsg, '❌');
-            log('error', 'Failed to download media', userId);
-            await ctx.reply(messages.DOWNLOAD_ERROR);
+            log('error', `Failed to download media (reason: ${result.reason || 'generic'})`, userId);
+            const errMsg = result.reason === 'restricted' ? messages.RESTRICTED_ERROR
+                : result.reason === 'private' ? messages.PRIVATE_ERROR
+                : result.reason === 'unavailable' ? messages.UNAVAILABLE_ERROR
+                : messages.DOWNLOAD_ERROR;
+            await ctx.reply(errMsg);
         }
     } catch (error) {
         log('error', `Processing error: ${error.message}`, userId);
