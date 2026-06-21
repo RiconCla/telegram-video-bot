@@ -80,9 +80,9 @@ async function downloadViaYtdlp(url, userId) {
         '--no-warnings',
         '--force-overwrites',
         // Сначала предпочесть h264 (без транскода для Telegram, меньше размер),
-        // затем ≤1080p, mp4/m4a, aac. vcodec:h264 РАНЬШЕ res — берём 720p h264
-        // вместо 1080p AV1/VP9. -S только СОРТИРУЕТ и не ломает фото-посты.
-        '-S', 'vcodec:h264,res:1080,ext:mp4:m4a,acodec:aac',
+        // затем ≤720p, mp4/m4a, aac. 720p почти всегда влезает в 50MB без сжатия —
+        // быстрее и легче серверу. -S только СОРТИРУЕТ и не ломает фото-посты.
+        '-S', 'vcodec:h264,res:720,ext:mp4:m4a,acodec:aac',
         '--merge-output-format', 'mp4',
     ];
     if (config.DL_PROXY) {

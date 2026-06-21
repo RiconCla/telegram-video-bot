@@ -109,8 +109,8 @@ async function compressVideo(inputPath, userId) {
     return new Promise((resolve, reject) => {
         execFile(FFMPEG, [
             '-i', inputPath,
-            // даунскейл до 1080 по высоте (4K/ультраширокие → меньше нужного битрейта)
-            '-vf', "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
+            // даунскейл до 720 по высоте (меньше нужного битрейта, легче сжатие)
+            '-vf', "scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
             '-vcodec', 'libx264',
             ...rateArgs,
             '-preset', 'fast',
