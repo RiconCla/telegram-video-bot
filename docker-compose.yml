@@ -7,9 +7,9 @@ services:
       REQUIRED_CHANNEL: ${REQUIRED_CHANNEL}
       REQUIRED_CHANNEL_2: ${REQUIRED_CHANNEL_2}
       CHECK_SUBSCRIPTION: ${CHECK_SUBSCRIPTION}
-      # Бот ходит в Telegram напрямую (прокси не нужен). Прокси нужен только cobalt —
-      # см. сервис ss-http ниже. Если Telegram окажется недоступен напрямую,
-      # раскомментируй и задай PROXY_HOST/PROXY_PORT (SOCKS5):
+      # Бот ходит в Telegram напрямую (прокси не нужен). Прокси нужен только для
+      # загрузки (yt-dlp) — см. DL_PROXY ниже. Если Telegram окажется недоступен
+      # напрямую, раскомментируй и задай PROXY_HOST/PROXY_PORT (SOCKS5):
       # PROXY_HOST: ${PROXY_HOST}
       # PROXY_PORT: ${PROXY_PORT}
       ADMIN_ID: ${ADMIN_ID}
@@ -21,32 +21,29 @@ services:
       INGEST_SECRET: ${INGEST_SECRET}
       FORWARD_USER_ID: ${FORWARD_USER_ID}
       SHARED_INGEST_DIR: ${SHARED_INGEST_DIR}
-      # ── Cobalt ──
-      COBALT_API_URL: ${COBALT_API_URL:-http://cobalt:9000/}
-      COBALT_API_KEY: ${COBALT_API_KEY:-}
+      # ── Прокси для загрузки (yt-dlp + Instagram embed) → ss-proxy (SOCKS5) ──
+      DL_PROXY: ${DL_PROXY:-socks5h://ss-proxy:1080}
     volumes:
       - ingest:/data/ingest
       - bot_data:/app/data
     networks:
       - autoposter_net   # как раньше — связь с autoposter (НЕ трогаем)
-      - cobalt_net       # внутренняя связь bot ↔ cobalt
+      - proxy_net        # внутренняя связь bot ↔ ss-proxy
     depends_on:
-      - cobalt
+      - ss-proxy
 
-  # HTTP-прокси поверх Shadowsocks-сервера (cobalt поддерживает только HTTP(S)-прокси,
-  # не SOCKS5). shadowsocks-rust в режиме --protocol http: вход HTTP на :8080,
-  # выход — в твой Shadowsocks-сервер (SHADOWSOCKS_* из env).
-  ss-http:
+  # SOCKS5-прокси поверх Shadowsocks-сервера: yt-dlp и Instagram embed ходят
+  # в соцсети через него (сервер гео-блокируется). shadowsocks-rust sslocal
+  # в дефолтном режиме = SOCKS5 на :1080, выход — в твой SS-сервер (SHADOWSOCKS_*).
+  ss-proxy:
     image: ghcr.io/shadowsocks/sslocal-rust:latest
     restart: unless-stopped
     # entrypoint образа делает `exec "$@"`, поэтому первым аргументом обязателен
-    # бинарник sslocal (иначе `exec --protocol …` → "illegal option --").
+    # бинарник sslocal (иначе `exec -b …` → "illegal option").
     command:
       - sslocal
-      - --protocol
-      - http
       - -b
-      - 0.0.0.0:8080
+      - 0.0.0.0:1080
       - -s
       - ${SHADOWSOCKS_HOST}:${SHADOWSOCKS_PORT}
       - -k
@@ -54,42 +51,7 @@ services:
       - -m
       - ${SHADOWSOCKS_METHOD}
     networks:
-      - cobalt_net
-
-  # Self-hosted загрузчик. В соцсети ходит через ss-http (HTTP-прокси над Shadowsocks).
-  cobalt:
-    image: ghcr.io/imputnet/cobalt:11
-    init: true
-    read_only: true
-    restart: unless-stopped
-    environment:
-      # Внутренний адрес — бот качает tunnel-URL по docker-сети, наружу не публикуем
-      API_URL: "http://cobalt:9000/"
-      # Внешние запросы (TikTok/IG/YT) — через HTTP-прокси ss-http.
-      # cobalt читает стандартные HTTP_PROXY/HTTPS_PROXY (EnvHttpProxyAgent).
-      HTTP_PROXY: "http://ss-http:8080"
-      HTTPS_PROXY: "http://ss-http:8080"
-    labels:
-      - com.centurylinklabs.watchtower.scope=cobalt
-    networks:
-      - cobalt_net
-    depends_on:
-      - ss-http
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-
-  # Автообновление образа cobalt (опционально)
-  watchtower:
-    image: ghcr.io/containrrr/watchtower
-    restart: unless-stopped
-    command: --cleanup --scope cobalt --interval 900 --include-restarting
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    labels:
-      - com.centurylinklabs.watchtower.scope=cobalt
+      - proxy_net
 
 volumes:
   ingest:
@@ -103,5 +65,5 @@ networks:
   autoposter_net:
     name: bots-autoposter-kpxqbs_default
     external: true
-  cobalt_net:
+  proxy_net:
     driver: bridge

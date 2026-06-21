@@ -2,8 +2,7 @@ const { Input } = require('telegraf');
 const { Markup } = require('telegraf');
 const { log } = require('../utils/logger');
 const { validateUrl } = require('../middleware/validation');
-const { downloadViaCobalt } = require('../services/cobalt');
-const { downloadMediaFile } = require('../services/downloader');
+const { downloadViaYtdlp } = require('../services/ytdlp');
 const { getLocale, hasNoAskLang, getUserLanguage } = require('../utils/i18n');
 const {
     checkSubscription,
@@ -59,7 +58,7 @@ async function handleUrl(ctx, isActive) {
     log('info', 'Download started', userId);
 
     try {
-        const result = await downloadViaCobalt(messageText, userId);
+        const result = await downloadViaYtdlp(messageText, userId);
 
         if (result.success) {
             // forwardItems заполняется handle*-функциями — список локальных файлов
@@ -118,7 +117,7 @@ async function handleUrl(ctx, isActive) {
 async function handleVideo(ctx, result, userId, loadingMsg, messages, forwardItems) {
     log('info', 'Sending video to user', userId);
 
-    const videoPath = await downloadMediaFile(result.url, userId, 'video.mp4');
+    const videoPath = result.url; // локальный файл, скачанный yt-dlp
     const finalPath = await compressVideo(videoPath, userId);
     if (finalPath !== videoPath && fs.existsSync(videoPath)) {
         fs.unlinkSync(videoPath);
@@ -179,15 +178,11 @@ async function handleImageCarousel(ctx, result, userId, loadingMsg, messages, fo
 
             const imagePaths = [];
             for (let i = 0; i < batchItems.length; i++) {
-                try {
-                    const imagePath = await downloadMediaFile(
-                        batchItems[i],
-                        userId,
-                        `batch${batch}_image_${i}.jpg`
-                    );
-                    imagePaths.push(imagePath);
-                } catch (downloadError) {
-                    log('error', `Failed to get image ${startIndex + i}: ${downloadError.message}`, userId);
+                // batchItems[i] — локальный файл, скачанный yt-dlp/embed
+                if (fs.existsSync(batchItems[i])) {
+                    imagePaths.push(batchItems[i]);
+                } else {
+                    log('error', `Image file missing: ${batchItems[i]}`, userId);
                 }
             }
 
@@ -237,7 +232,7 @@ async function handleImageCarousel(ctx, result, userId, loadingMsg, messages, fo
 async function handleSingleImage(ctx, result, userId, loadingMsg, messages, forwardItems) {
     log('info', 'Sending single image to user', userId);
 
-    const imagePath = await downloadMediaFile(result.url, userId, 'image.jpg');
+    const imagePath = result.url; // локальный файл, скачанный yt-dlp/embed
 
     await editMessage(ctx, loadingMsg, messages.sendingImage());
     const isAdmin = String(userId) === String(config.ADMIN_ID);
@@ -266,7 +261,7 @@ async function handleMixed(ctx, result, userId, loadingMsg, messages, forwardIte
         const item = items[i];
         try {
             if (item.type === 'video') {
-                const videoPath = await downloadMediaFile(item.url, userId, `mixed_${i}.mp4`);
+                const videoPath = item.url; // локальный файл от yt-dlp
                 const finalPath = await compressVideo(videoPath, userId);
                 if (finalPath !== videoPath && fs.existsSync(videoPath)) {
                     fs.unlinkSync(videoPath);
@@ -288,9 +283,8 @@ async function handleMixed(ctx, result, userId, loadingMsg, messages, forwardIte
                 if (Array.isArray(forwardItems) && fs.existsSync(finalPath)) {
                     forwardItems.push({ path: finalPath, kind: 'video' });
                 }
-            } else {
-                const imagePath = await downloadMediaFile(item.url, userId, `mixed_${i}.jpg`);
-                photoPaths.push(imagePath);
+            } else if (fs.existsSync(item.url)) {
+                photoPaths.push(item.url); // локальный файл от yt-dlp
             }
         } catch (e) {
             log('error', `Mixed carousel item ${i} failed: ${e.message}`, userId);

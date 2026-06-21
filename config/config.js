@@ -24,11 +24,10 @@ module.exports = {
     LOGS_DIR: path.join(__dirname, '..', 'logs'),
     TEMP_DIR: path.join(__dirname, '..', 'temp'),
 
-    // ── Cobalt (self-hosted загрузчик) ───────────────────
-    // Внутренний адрес cobalt по docker-сети. По умолчанию http://cobalt:9000/
-    COBALT_API_URL: process.env.COBALT_API_URL || 'http://cobalt:9000/',
-    // Необязательный ключ, если у cobalt включена авторизация (Authorization: Api-Key)
-    COBALT_API_KEY: process.env.COBALT_API_KEY || null,
+    // ── Прокси для загрузки (yt-dlp + Instagram embed-фоллбек) ───
+    // SOCKS5-выход в не-заблокированную зону (контейнер ss-proxy над Shadowsocks).
+    // Пусто → без прокси (прямой доступ). Формат: socks5h://host:port
+    DL_PROXY: process.env.DL_PROXY || 'socks5h://ss-proxy:1080',
 
     // Статистика и отчёты
     ADMIN_ID: (process.env.ADMIN_ID || '').trim() || null,

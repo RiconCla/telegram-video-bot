@@ -24,10 +24,11 @@ Telegram-бот для скачивания видео и изображений
 
 ## ✨ Функционал
 
-### Загрузка (через self-hosted [cobalt](https://github.com/imputnet/cobalt))
+### Загрузка (через [yt-dlp](https://github.com/yt-dlp/yt-dlp), без cookies)
 - Единый загрузчик для всех платформ: TikTok, Instagram, YouTube, X/Twitter, Reddit, VK и др.
 - Видео, слайдшоу, карусели (фото и видео+фото), одиночные фото
-- cobalt отдаёт готовый медиа-URL, бот его скачивает; список доменов — в `src/middleware/validation.js`
+- yt-dlp качает файлы локально; для Instagram-постов есть embed-фоллбек без cookies
+- Выход в соцсети через SOCKS5-прокси `ss-proxy` (мост над Shadowsocks); список доменов — в `src/middleware/validation.js`
 
 ### Пользовательский UX
 - Двуязычный интерфейс (RU/EN), команда `/lang` для смены
@@ -50,7 +51,7 @@ Telegram-бот для скачивания видео и изображений
 - Дебаунс записи stats.json (1с) и invalid-users (1с)
 - Параллельная проверка подписок (пул из 5) при формировании отчёта
 - Кеш подписок на 12 часов
-- Поддержка SOCKS5-прокси для Telegram API (бот) и для cobalt (доступ к соцсетям, серверы в РФ)
+- Загрузка через SOCKS5-прокси `ss-proxy` (доступ к соцсетям с гео-блокируемых серверов); бот в Telegram ходит напрямую
 
 ---
 
@@ -65,7 +66,8 @@ Telegram-бот для скачивания видео и изображений
 | Proxy | socks-proxy-agent 8 |
 | Env | dotenv 16 |
 | Внешние утилиты | `ffmpeg`/`ffprobe` (метаданные + компрессия) |
-| Загрузчик | self-hosted `cobalt` (отдельный контейнер) |
+| Загрузчик | `yt-dlp` (в образе бота) + Instagram embed-фоллбек |
+| Прокси | `ss-proxy` — shadowsocks-rust (SOCKS5) над Shadowsocks-сервером |
 | Process manager | PM2 (опционально) или Docker |
 
 ---
@@ -87,7 +89,7 @@ telegram-video-bot/
 │   ├── handlers/
 │   │   ├── start.js                # /start, выбор языка, кнопка активации
 │   │   ├── lang.js                 # /lang, смена языка
-│   │   ├── url.js                  # Обработка ссылок (загрузка через cobalt)
+│   │   ├── url.js                  # Обработка ссылок (загрузка через yt-dlp)
 │   │   └── error.js                # bot.catch handler
 │   ├── locales/
 │   │   ├── en.js                   # Английская локаль
@@ -95,10 +97,9 @@ telegram-video-bot/
 │   ├── middleware/
 │   │   ├── rateLimit.js            # Rate limiting (1 req/sec)
 │   │   ├── subscription.js         # Проверка подписки на канал
-│   │   └── validation.js           # Валидация URL (allowlist доменов cobalt)
+│   │   └── validation.js           # Валидация URL (allowlist доменов yt-dlp)
 │   ├── services/
-│   │   ├── downloader.js           # HTTP-скачивание медиа по URL
-│   │   ├── cobalt.js               # Интеграция с cobalt API (загрузка всех платформ)
+│   │   ├── ytdlp.js                # Загрузка через yt-dlp + Instagram embed-фоллбек
 │   │   └── scheduler.js            # Cron-отчёты, /stats, /users, admin menu
 │   └── utils/
 │       ├── logger.js               # Логирование (console + файл с ротацией 7 дней)
@@ -139,7 +140,7 @@ telegram-video-bot/
 - **Node.js** ≥ 18.x
 - **npm** ≥ 9.x
 - **ffmpeg** + **ffprobe** (для сжатия и метаданных видео)
-- **cobalt** — self-hosted инстанс загрузчика (отдельный контейнер, см. `docker-compose.yml`)
+- **yt-dlp** + **python3** (загрузчик; в Docker ставится в образ автоматически)
 - **Docker** (рекомендуется — для Docploy/контейнерного деплоя)
 - **PM2** (опционально — для production без Docker)
 
@@ -161,12 +162,14 @@ cd telegram-video-bot
 ./setup.sh
 
 # либо вручную
-sudo apt-get install -y ffmpeg
+sudo apt-get install -y ffmpeg python3
+sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+sudo chmod a+rx /usr/local/bin/yt-dlp
 ```
 
-> Загрузка видео идёт через self-hosted cobalt. При деплое через Docker он поднимается
-> автоматически отдельным сервисом (см. `docker-compose.yml`). Для локального запуска без
-> Docker подними cobalt отдельно и укажи его адрес в `COBALT_API_URL`.
+> При деплое через Docker yt-dlp и SOCKS5-прокси `ss-proxy` поднимаются автоматически
+> (см. `docker-compose.yml`). Прокси нужен для доступа к соцсетям с гео-блокируемого сервера;
+> адрес задаётся в `DL_PROXY` (по умолчанию `socks5h://ss-proxy:1080`).
 
 ### 3. Установить npm-зависимости
 
@@ -195,20 +198,23 @@ REQUIRED_CHANNEL=@your_channel
 CHECK_SUBSCRIPTION=true
 
 # ============================================
-# PROXY (для серверов в РФ)
+# SHADOWSOCKS (апстрим для прокси-моста ss-proxy)
 # ============================================
-# SOCKS5-прокси: используется ботом (Telegram API) и cobalt (доступ к соцсетям).
-# Требуется отдельно поднятый ss-local (Shadowsocks/Outline).
-PROXY_HOST=127.0.0.1
-PROXY_PORT=1080
+SHADOWSOCKS_HOST=188.132.184.170
+SHADOWSOCKS_PORT=30964
+SHADOWSOCKS_PASSWORD=your_password
+SHADOWSOCKS_METHOD=chacha20-ietf-poly1305
 
 # ============================================
-# COBALT (загрузчик)
+# ПРОКСИ ДЛЯ ЗАГРУЗКИ (yt-dlp)
 # ============================================
-# Внутренний адрес cobalt в docker-сети (по умолчанию http://cobalt:9000/)
-COBALT_API_URL=http://cobalt:9000/
-# Ключ авторизации cobalt, если включён (иначе оставить пустым)
-COBALT_API_KEY=
+# SOCKS5-выход через контейнер ss-proxy (мост над Shadowsocks).
+# Пусто → без прокси (прямой доступ).
+DL_PROXY=socks5h://ss-proxy:1080
+
+# (опционально) SOCKS5-прокси для Telegram API самого бота — обычно не нужно.
+# PROXY_HOST=127.0.0.1
+# PROXY_PORT=1080
 
 # ============================================
 # СТАТИСТИКА И ОТЧЁТЫ
@@ -289,7 +295,7 @@ docker run -d --name telegram-video-bot \
 
 ### Docker / Docploy
 
-`Dockerfile` использует `node:18-alpine` + ставит `ffmpeg` в образ (yt-dlp больше не нужен). `docker-compose.yml` поднимает два сервиса: `bot` и `cobalt` (загрузчик) на внутренней сети `cobalt_net`; сеть/volume автопостера не затрагиваются. `cobalt` ходит в соцсети через `API_EXTERNAL_PROXY` (тот же SOCKS5, что и бот). `.dockerignore` исключает `credit.env`, `data/`, `logs/`, `temp/`, `pics/`, `*.exe`. Для деплоя через Docploy достаточно подсунуть переменные окружения и примонтировать `data/` для сохранения состояния между перезапусками.
+`Dockerfile` использует `node:18-alpine` + ставит `ffmpeg`, `python3` и `yt-dlp` в образ. `docker-compose.yml` поднимает два сервиса: `bot` и `ss-proxy` (SOCKS5-мост над Shadowsocks) на внутренней сети `proxy_net`; сеть/volume автопостера не затрагиваются. yt-dlp ходит в соцсети через `DL_PROXY` (`socks5h://ss-proxy:1080`), бот в Telegram — напрямую. Для `ss-proxy` нужны переменные `SHADOWSOCKS_HOST/PORT/PASSWORD/METHOD`. `.dockerignore` исключает `credit.env`, `data/`, `logs/`, `temp/`, `pics/`, `*.exe`. Для деплоя через Docploy достаточно подсунуть переменные окружения и примонтировать `data/` для сохранения состояния между перезапусками.
 
 ### Обновление
 
