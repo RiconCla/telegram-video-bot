@@ -7,8 +7,9 @@ services:
       REQUIRED_CHANNEL: ${REQUIRED_CHANNEL}
       REQUIRED_CHANNEL_2: ${REQUIRED_CHANNEL_2}
       CHECK_SUBSCRIPTION: ${CHECK_SUBSCRIPTION}
-      # Прокси временно отключён. Чтобы вернуть — раскомментировать обе строки
-      # и API_EXTERNAL_PROXY у сервиса cobalt ниже.
+      # Бот ходит в Telegram напрямую (прокси не нужен). Прокси нужен только cobalt —
+      # см. сервис ss-http ниже. Если Telegram окажется недоступен напрямую,
+      # раскомментируй и задай PROXY_HOST/PROXY_PORT (SOCKS5):
       # PROXY_HOST: ${PROXY_HOST}
       # PROXY_PORT: ${PROXY_PORT}
       ADMIN_ID: ${ADMIN_ID}
@@ -32,7 +33,27 @@ services:
     depends_on:
       - cobalt
 
-  # Self-hosted загрузчик. Ходит в соцсети через тот же SOCKS5-прокси, что и бот.
+  # HTTP-прокси поверх Shadowsocks-сервера (cobalt поддерживает только HTTP(S)-прокси,
+  # не SOCKS5). shadowsocks-rust в режиме --protocol http: вход HTTP на :8080,
+  # выход — в твой Shadowsocks-сервер (SHADOWSOCKS_* из env).
+  ss-http:
+    image: ghcr.io/shadowsocks/sslocal-rust:latest
+    restart: unless-stopped
+    command:
+      - --protocol
+      - http
+      - -b
+      - 0.0.0.0:8080
+      - -s
+      - ${SHADOWSOCKS_HOST}:${SHADOWSOCKS_PORT}
+      - -k
+      - ${SHADOWSOCKS_PASSWORD}
+      - -m
+      - ${SHADOWSOCKS_METHOD}
+    networks:
+      - cobalt_net
+
+  # Self-hosted загрузчик. В соцсети ходит через ss-http (HTTP-прокси над Shadowsocks).
   cobalt:
     image: ghcr.io/imputnet/cobalt:11
     init: true
@@ -41,14 +62,16 @@ services:
     environment:
       # Внутренний адрес — бот качает tunnel-URL по docker-сети, наружу не публикуем
       API_URL: "http://cobalt:9000/"
-      # Прокси временно отключён — cobalt ходит в соцсети напрямую.
-      # Чтобы вернуть (сервер гео-блокируется в РФ) — раскомментировать строку ниже
-      # и PROXY_HOST/PROXY_PORT в сервисе bot выше.
-      # API_EXTERNAL_PROXY: "socks5h://${PROXY_HOST}:${PROXY_PORT}"
+      # Внешние запросы (TikTok/IG/YT) — через HTTP-прокси ss-http.
+      # cobalt читает стандартные HTTP_PROXY/HTTPS_PROXY (EnvHttpProxyAgent).
+      HTTP_PROXY: "http://ss-http:8080"
+      HTTPS_PROXY: "http://ss-http:8080"
     labels:
       - com.centurylinklabs.watchtower.scope=cobalt
     networks:
       - cobalt_net
+    depends_on:
+      - ss-http
     deploy:
       resources:
         limits:
