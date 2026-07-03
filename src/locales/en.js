@@ -21,13 +21,17 @@ module.exports = {
 
     BOT_ACTIVATED: '✅ Great! Now send me a link to a video or image from TikTok or Instagram.',
 
-    SUBSCRIPTION_REQUIRED: 'To use this bot, please subscribe to this channel! It\'s the minimum I ask of you :)',
+    SUBSCRIPTION_REQUIRED: '🎬 Almost there! The bot is free — I just ask you to subscribe to the channel, it takes 5 seconds. Subscribe and tap "✅ Check" 👇',
 
-    SUBSCRIPTION_FAILED: 'You are still not subscribed to the channel. Please subscribe and try again :)',
+    SUBSCRIPTION_FAILED: '🙃 I still don\'t see your subscription. Subscribe to the channel and tap "✅ Check" again.',
+
+    SUBSCRIPTION_CHECK_OK_TOAST: 'Done! Access granted ✅',
+
+    SUBSCRIPTION_CHECK_FAIL_TOAST: 'Subscription not found yet 🙁 Subscribe and try again.',
 
     SUBSCRIBE_BUTTON: '📢 Subscribe',
 
-    CHECK_SUBSCRIPTION_BUTTON: '✅ I subscribed',
+    CHECK_SUBSCRIPTION_BUTTON: '✅ Check subscription',
 
     NOT_ACTIVATED: 'Press the "🚀 Launch bot" button to get started.',
 
@@ -97,5 +101,5 @@ module.exports = {
 
     batchPart: (part, total) => `📸 Part ${part}/${total}`,
 
-    SUBSCRIPTION_REMINDER: 'Hi! Just a reminder — please subscribe to the channel to use the bot :)'
+    SUBSCRIPTION_REMINDER: '👋 Your video is still waiting! Subscribe to the channel — and I\'ll send it right away. It\'s free and just 1 click 🎬'
 };

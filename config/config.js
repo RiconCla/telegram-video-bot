@@ -6,6 +6,11 @@ function parseChannelList(raw) {
     return (raw || '').split(',').map(s => s.trim()).filter(Boolean);
 }
 
+// Разбор списка целых чисел из ENV: "12, 48, 168" → [12, 48, 168]
+function parseIntList(raw) {
+    return (raw || '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => Number.isFinite(n) && n > 0);
+}
+
 module.exports = {
     // Telegram
     BOT_TOKEN: process.env.BOT_TOKEN,
@@ -42,8 +47,10 @@ module.exports = {
     REPORT_TIME: process.env.REPORT_TIME || '20:00',
     REPORT_TIMEZONE: process.env.REPORT_TIMEZONE || 'Europe/Moscow',
 
-    // Напоминание о подписке (в днях)
-    SUBSCRIPTION_REMINDER_DAYS: parseInt(process.env.SUBSCRIPTION_REMINDER_DAYS) || 5,
+    // Эскалирующие напоминания о подписке: часы (кумулятивно от первого показа гейта)
+    // до 1/2/3-го напоминания. После последнего бот перестаёт напоминать.
+    // Дефолт: 12ч → 2д → 7д.
+    SUBSCRIPTION_REMINDER_SCHEDULE: parseIntList(process.env.SUBSCRIPTION_REMINDER_SCHEDULE || '12,48,168'),
 
     // ── Autoposter integration ────────────────────────────
     // URL Python-сервиса по docker-сети (или http://host:8000 в dev).

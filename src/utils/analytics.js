@@ -4,6 +4,9 @@ const path = require('path');
 
 const STATS_FILE = path.resolve(__dirname, '../../data/stats.json');
 
+// Воронка подписки (кумулятивные счётчики за всё время)
+const DEFAULT_FUNNEL = { gatePrompts: 0, checkClicks: 0, conversions: 0, remindersSent: 0 };
+
 // --- Персистентность ---
 function ensureDataDir() {
     const dir = path.dirname(STATS_FILE);
@@ -27,7 +30,8 @@ function loadFromFile() {
                 dailyUsers: new Set(data.dailyUsers || []),
                 weeklyUsers: new Set(data.weeklyUsers || []),
                 monthlyUsers: new Set(data.monthlyUsers || []),
-                statsHistory: data.statsHistory || { daily: [], weekly: [], monthly: [] }
+                statsHistory: data.statsHistory || { daily: [], weekly: [], monthly: [] },
+                funnel: { ...DEFAULT_FUNNEL, ...(data.funnel || {}) }
             };
         }
     } catch (e) {
@@ -48,7 +52,8 @@ function saveToFile() {
                 dailyUsers: [...dailyUsers],
                 weeklyUsers: [...weeklyUsers],
                 monthlyUsers: [...monthlyUsers],
-                statsHistory
+                statsHistory,
+                funnel
             };
             fs.writeFileSync(STATS_FILE, JSON.stringify(data, null, 2), 'utf-8');
         } catch (e) {
@@ -64,6 +69,7 @@ const dailyUsers   = saved ? saved.dailyUsers   : new Set();
 const weeklyUsers  = saved ? saved.weeklyUsers  : new Set();
 const monthlyUsers = saved ? saved.monthlyUsers : new Set();
 const statsHistory = saved ? saved.statsHistory : { daily: [], weekly: [], monthly: [] };
+const funnel = saved ? saved.funnel : { ...DEFAULT_FUNNEL };
 
 // --- Основные функции (без изменений логики, добавлен saveToFile) ---
 function trackUser(userId, username) {
@@ -145,4 +151,16 @@ function getAllUsersList() {
     return { totalUsers: userStats.size, users };
 }
 
-module.exports = { trackUser, getStats, resetStats, getAllUsersList };
+// Инкремент счётчика воронки подписки.
+// event ∈ { 'gatePrompts', 'checkClicks', 'conversions', 'remindersSent' }
+function trackFunnel(event) {
+    if (!(event in funnel)) return;
+    funnel[event]++;
+    saveToFile();
+}
+
+function getFunnel() {
+    return { ...funnel };
+}
+
+module.exports = { trackUser, getStats, resetStats, getAllUsersList, trackFunnel, getFunnel };

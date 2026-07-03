@@ -11,7 +11,7 @@ const {
 } = require('../middleware/subscription');
 const config = require('../../config/config');
 const fs = require('fs');
-const { trackUser } = require('../utils/analytics');
+const { trackUser, trackFunnel } = require('../utils/analytics');
 const { compressVideo, getVideoMeta } = require('../utils/compressor');
 const { markPending } = require('../utils/pendingSubscriptions');
 // ── autoposter integration ──
@@ -37,6 +37,7 @@ async function handleUrl(ctx, isActive) {
     const { ok, missing } = await checkSubscription(ctx);
     if (!ok) {
         log('warning', 'User not subscribed to required channel(s)', userId);
+        trackFunnel('gatePrompts');
         markPending(userId, getUserLanguage(userId));
         await ctx.reply(
             pickRequiredText(messages, missing),

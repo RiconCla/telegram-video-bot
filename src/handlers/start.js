@@ -16,6 +16,7 @@ const {
 } = require('../utils/i18n');
 const { markPending, removePending } = require('../utils/pendingSubscriptions');
 const subscriptionCache = require('../utils/subscriptionCache');
+const { trackFunnel } = require('../utils/analytics');
 const en = require('../locales/en');
 
 // ─────────────────────────────────────────────
@@ -165,14 +166,16 @@ async function handleCheckSubscription(ctx) {
     const userId = ctx.from.id;
     const messages = getLocale(userId);
 
-    await ctx.answerCbQuery();
-    log('info', 'User clicked "I subscribed" button', userId);
+    log('info', 'User clicked "check subscription" button', userId);
+    trackFunnel('checkClicks');
 
     subscriptionCache.invalidate(userId);
     const { ok, missing } = await checkSubscription(ctx);
 
     if (!ok) {
         log('warning', 'Subscription verification failed', userId);
+        // Мгновенный popup-ответ на нажатие кнопки
+        await ctx.answerCbQuery(messages.SUBSCRIPTION_CHECK_FAIL_TOAST, { show_alert: true });
         markPending(userId, getUserLanguage(userId));
         await ctx.reply(
             pickFailedText(messages, missing),
@@ -181,8 +184,10 @@ async function handleCheckSubscription(ctx) {
         return;
     }
 
+    await ctx.answerCbQuery(messages.SUBSCRIPTION_CHECK_OK_TOAST);
     removePending(userId);
     setUserActive(userId);
+    trackFunnel('conversions');
     log('success', 'Subscription verified successfully', userId);
 
     try {

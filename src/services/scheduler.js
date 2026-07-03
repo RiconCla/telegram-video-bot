@@ -1,8 +1,8 @@
 const cron = require('node-cron');
 const config = require('../../config/config');
 const { log } = require('../utils/logger');
-const { getStats, resetStats, getAllUsersList } = require('../utils/analytics');
-const { getPendingUsers, removePending, markPending } = require('../utils/pendingSubscriptions');
+const { getStats, resetStats, getAllUsersList, getFunnel, trackFunnel } = require('../utils/analytics');
+const { getPendingUsers, removePending, recordReminder } = require('../utils/pendingSubscriptions');
 const {
     checkSubscriptionForLang,
     checkChannelSubscription,
@@ -80,22 +80,41 @@ async function formatReport(stats, telegram) {
         message += `ℹ️ За этот период активности не было.`;
     }
 
-    message += `\n🕐 Отчёт сформирован: ${new Date().toLocaleString('ru-RU', { timeZone: config.REPORT_TIMEZONE })}`;
+    // Воронка подписки (кумулятивно за всё время)
+    if (config.CHECK_SUBSCRIPTION) {
+        const f = getFunnel();
+        const convRate = f.gatePrompts > 0 ? Math.round((f.conversions / f.gatePrompts) * 100) : 0;
+        message += `\n\n📈 *Воронка подписки (всего):*\n`;
+        message += `• Гейт показан: *${f.gatePrompts}*\n`;
+        message += `• Подписалось: *${f.conversions}* (${convRate}%)\n`;
+        message += `• Напоминаний отправлено: *${f.remindersSent}*`;
+    }
+
+    message += `\n\n🕐 Отчёт сформирован: ${new Date().toLocaleString('ru-RU', { timeZone: config.REPORT_TIMEZONE })}`;
 
     return message;
 }
 
-// Отправка напоминаний о подписке
+// Отправка эскалирующих напоминаний о подписке.
+// Расписание SUBSCRIPTION_REMINDER_SCHEDULE — часы (кумулятивно от addedAt) до каждого
+// напоминания. Юзер получает не больше, чем длина расписания, затем эскалация исчерпана.
 async function sendSubscriptionReminders() {
     if (!bot || !config.CHECK_SUBSCRIPTION) return;
 
+    const schedule = config.SUBSCRIPTION_REMINDER_SCHEDULE;
+    if (!schedule.length) return;
+
     const pendingUsers = getPendingUsers();
     const now = new Date();
-    const intervalMs = config.SUBSCRIPTION_REMINDER_DAYS * 24 * 60 * 60 * 1000;
     let sent = 0;
 
-    for (const { userId, lastReminder, lang } of pendingUsers) {
-        if (now - lastReminder < intervalMs) continue;
+    for (const { userId, addedAt, remindersSent, lang } of pendingUsers) {
+        // Эскалация исчерпана — больше не напоминаем
+        if (remindersSent >= schedule.length) continue;
+
+        // Порог следующего напоминания ещё не наступил
+        const dueMs = schedule[remindersSent] * 60 * 60 * 1000;
+        if (now - addedAt < dueMs) continue;
 
         const effectiveLang = lang || 'en';
 
@@ -103,6 +122,7 @@ async function sendSubscriptionReminders() {
         const { ok, missing } = await checkSubscriptionForLang(bot.telegram, userId, effectiveLang);
         if (ok) {
             removePending(userId);
+            trackFunnel('conversions');
             log('info', `User subscribed since last check, removed from pending`, userId);
             continue;
         }
@@ -113,9 +133,10 @@ async function sendSubscriptionReminders() {
             await bot.telegram.sendMessage(userId, pickReminderText(locale, missing), {
                 reply_markup: keyboard.reply_markup
             });
-            markPending(userId, effectiveLang); // обновляем lastReminder
+            recordReminder(userId); // инкремент remindersSent + lastReminder
+            trackFunnel('remindersSent');
             sent++;
-            log('info', `Subscription reminder sent`, userId);
+            log('info', `Subscription reminder ${remindersSent + 1}/${schedule.length} sent`, userId);
         } catch (e) {
             if (e.response?.error_code === 403) {
                 // Пользователь заблокировал бота
@@ -224,16 +245,16 @@ function initScheduler(botInstance) {
 
     log('success', `Report scheduler initialized successfully!`);
 
-    // Напоминание о подписке — каждый день в 12:00
-    if (config.CHECK_SUBSCRIPTION && config.SUBSCRIPTION_REMINDER_DAYS > 0) {
-        cron.schedule('0 12 * * *', () => {
+    // Эскалирующие напоминания о подписке — проверка каждые 6 часов
+    if (config.CHECK_SUBSCRIPTION && config.SUBSCRIPTION_REMINDER_SCHEDULE.length > 0) {
+        cron.schedule('0 */6 * * *', () => {
             log('info', 'Running subscription reminder check...');
             sendSubscriptionReminders();
         }, {
             scheduled: true,
             timezone: config.REPORT_TIMEZONE
         });
-        log('success', `Subscription reminder scheduler initialized (every ${config.SUBSCRIPTION_REMINDER_DAYS} days)`);
+        log('success', `Subscription reminder scheduler initialized (schedule: ${config.SUBSCRIPTION_REMINDER_SCHEDULE.join('h, ')}h)`);
     }
 }
 
