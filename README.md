@@ -194,7 +194,10 @@ cp credit.env.example credit.env  # если есть пример, иначе �
 # TELEGRAM BOT
 # ============================================
 BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
-REQUIRED_CHANNEL=@your_channel
+# Каналы, обязательные для всех языков (через запятую)
+REQUIRED_CHANNELS=@your_channel
+# Доп. каналы, обязательные только для ru-юзеров (через запятую)
+REQUIRED_CHANNELS_RU=@your_ru_channel
 CHECK_SUBSCRIPTION=true
 
 # ============================================

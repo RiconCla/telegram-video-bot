@@ -4,8 +4,8 @@ services:
     restart: unless-stopped
     environment:
       BOT_TOKEN: ${BOT_TOKEN}
-      REQUIRED_CHANNEL: ${REQUIRED_CHANNEL}
-      REQUIRED_CHANNEL_2: ${REQUIRED_CHANNEL_2}
+      REQUIRED_CHANNELS: ${REQUIRED_CHANNELS}
+      REQUIRED_CHANNELS_RU: ${REQUIRED_CHANNELS_RU}
       CHECK_SUBSCRIPTION: ${CHECK_SUBSCRIPTION}
       # Бот ходит в Telegram напрямую (прокси не нужен). Прокси нужен только для
       # загрузки (yt-dlp) — см. DL_PROXY ниже. Если Telegram окажется недоступен

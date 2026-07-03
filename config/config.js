@@ -1,11 +1,18 @@
 require('dotenv').config();
 const path = require('path');
 
+// Разбор списка каналов из ENV: "@a, @b" → ['@a', '@b'] (тримит, отбрасывает пустые)
+function parseChannelList(raw) {
+    return (raw || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+
 module.exports = {
     // Telegram
     BOT_TOKEN: process.env.BOT_TOKEN,
-    REQUIRED_CHANNEL: process.env.REQUIRED_CHANNEL,
-    REQUIRED_CHANNEL_2: process.env.REQUIRED_CHANNEL_2 || null,
+    // Каналы, обязательные для всех языков
+    REQUIRED_CHANNELS: parseChannelList(process.env.REQUIRED_CHANNELS),
+    // Доп. каналы, обязательные только для ru-юзеров
+    REQUIRED_CHANNELS_RU: parseChannelList(process.env.REQUIRED_CHANNELS_RU),
     CHECK_SUBSCRIPTION: process.env.CHECK_SUBSCRIPTION === 'true',
 
     // Proxy (Shadowsocks/SOCKS5 для Telegram API)

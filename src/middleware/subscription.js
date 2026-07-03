@@ -10,9 +10,8 @@ const ALLOWED_STATUSES = ['creator', 'administrator', 'member'];
 // Какие каналы требуются для конкретного языка
 // ─────────────────────────────────────────────
 function requiredChannelsForLang(lang) {
-    const channels = [];
-    if (config.REQUIRED_CHANNEL) channels.push(config.REQUIRED_CHANNEL);
-    if (lang === 'ru' && config.REQUIRED_CHANNEL_2) channels.push(config.REQUIRED_CHANNEL_2);
+    const channels = [...config.REQUIRED_CHANNELS];
+    if (lang === 'ru') channels.push(...config.REQUIRED_CHANNELS_RU);
     return channels;
 }
 
@@ -81,11 +80,11 @@ function channelUrl(channel) {
 function buildSubscriptionKeyboard(messages, missing) {
     const channels = (missing && missing.length > 0)
         ? missing
-        : (config.REQUIRED_CHANNEL ? [config.REQUIRED_CHANNEL] : []);
+        : config.REQUIRED_CHANNELS;
 
     const rows = channels.map((ch, idx) => {
         const label = channels.length > 1
-            ? (idx === 0 ? messages.SUBSCRIBE_BUTTON_1 : messages.SUBSCRIBE_BUTTON_2)
+            ? `${messages.SUBSCRIBE_BUTTON} (${idx + 1})`
             : messages.SUBSCRIBE_BUTTON;
         return [Markup.button.url(label, channelUrl(ch))];
     });

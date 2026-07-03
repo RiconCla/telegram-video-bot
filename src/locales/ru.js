@@ -31,10 +31,6 @@ module.exports = {
 
     SUBSCRIBE_BUTTON: '📢 Подписаться',
 
-    SUBSCRIBE_BUTTON_1: '📢 Подписаться (1)',
-
-    SUBSCRIBE_BUTTON_2: '📢 Подписаться (2)',
-
     CHECK_SUBSCRIPTION_BUTTON: '✅ Я подписался',
 
     NOT_ACTIVATED: 'Нажмите кнопку "🚀 Запуск бота" для первого запуска.',

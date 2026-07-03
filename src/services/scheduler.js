@@ -34,14 +34,15 @@ async function formatReport(stats, telegram) {
     }
 
     // Параллельная проверка подписок: пул из 5 воркеров.
-    // В отчёте отслеживаем только основной канал (REQUIRED_CHANNEL), независимо от языка юзера.
+    // В отчёте отслеживаем только основной канал (первый в REQUIRED_CHANNELS), независимо от языка юзера.
     const subscriptionStatuses = new Map();
-    if (config.CHECK_SUBSCRIPTION && config.REQUIRED_CHANNEL && userList.length > 0) {
+    const mainChannel = config.REQUIRED_CHANNELS[0];
+    if (config.CHECK_SUBSCRIPTION && mainChannel && userList.length > 0) {
         const queue = [...userList];
         const worker = async () => {
             while (queue.length) {
                 const user = queue.shift();
-                const subscribed = await checkChannelSubscription(telegram, user.userId, config.REQUIRED_CHANNEL);
+                const subscribed = await checkChannelSubscription(telegram, user.userId, mainChannel);
                 subscriptionStatuses.set(user.userId, subscribed);
             }
         };
