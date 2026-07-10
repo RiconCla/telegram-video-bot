@@ -24,6 +24,9 @@ module.exports = {
     PROXY_HOST: process.env.PROXY_HOST,
     PROXY_PORT: process.env.PROXY_PORT,
 
+    // APIs
+    TIKTOK_API_URL: 'https://tikwm.com/api/',
+
     // Rate Limiting
     RATE_LIMIT: 1000,
 

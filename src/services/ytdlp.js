@@ -7,6 +7,7 @@ const { SocksProxyAgent } = require('socks-proxy-agent');
 const config = require('../../config/config');
 const { log } = require('../utils/logger');
 const { addUserFile } = require('../utils/fileManager');
+const { downloadTiktokAsFiles } = require('./tiktok');
 
 const execFileAsync = promisify(execFile);
 
@@ -18,6 +19,10 @@ const YT_DLP = fs.existsSync(localYtDlp) ? localYtDlp : 'yt-dlp';
 
 function isInstagramUrl(url) {
     return /instagram\.com/i.test(url);
+}
+
+function isTikTokUrl(url) {
+    return /tiktok\.com/i.test(url);
 }
 
 // Классификация ошибки yt-dlp в человекочитаемую причину для пользователя.
@@ -65,6 +70,14 @@ function buildProxyAgent() {
  *   { success:false }
  */
 async function downloadViaYtdlp(url, userId) {
+    // TikTok — основной способ tikwm.com (тянет и слайдшоу, и видео, недоступные
+    // yt-dlp без cookies); yt-dlp остаётся страховкой, если tikwm упал.
+    if (isTikTokUrl(url)) {
+        const tk = await downloadTiktokAsFiles(url, userId);
+        if (tk.success) return tk;
+        log('warning', 'tikwm failed for TikTok — falling back to yt-dlp', userId);
+    }
+
     log('info', `Starting yt-dlp download: ${url}`, userId);
 
     const userDir = path.join(config.TEMP_DIR, String(userId));
